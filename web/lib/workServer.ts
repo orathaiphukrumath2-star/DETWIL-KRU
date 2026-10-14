@@ -62,7 +62,7 @@ export function errorResponse(error: unknown) {
           ? 404
           : code === "RATE_LIMIT"
             ? 429
-            : code === "CONFLICT"
+            : code === "CONFLICT" || code === "ACCOUNT_EXISTS"
               ? 409
               : ["VALIDATION", "INVALID_STATE"].includes(code)
                 ? 400

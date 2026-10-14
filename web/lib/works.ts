@@ -84,7 +84,7 @@ export type MemberRole = {
 };
 export const roleLabels: Record<string, string> = {
   TEACHER: "ครู / ผู้จัดทำผลงาน",
-  SCHOOL_ADMIN: "ผู้ตรวจระดับโรงเรียน",
+  SCHOOL_ADMIN: "ครูผู้ตรวจระดับโรงเรียน",
   SUPERVISOR: "ศึกษานิเทศก์ / ผู้ตรวจระดับเขต",
   AREA_ADMIN: "ผู้ดูแลระดับเขต",
   SUPER_ADMIN: "ผู้ดูแลระบบ",

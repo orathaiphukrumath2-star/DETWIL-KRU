@@ -46,7 +46,7 @@ test('self registration stores only a salted hash and pending roles, never auto-
 
 test('duplicate emails and self-requested SUPER_ADMIN are rejected without creating extra users', () => {
   const f = fixture(); assert.equal(f.register([{role:'SUPER_ADMIN'}]).ok, false); assert.equal(f.tables.USERS.length, 1);
-  assert.equal(f.register().ok, true); assert.equal(f.register([], { email:' NEW@EXAMPLE.ORG ' }).ok, false); assert.equal(f.tables.USERS.length, 2);
+  assert.equal(f.register().ok, true); assert.equal(f.register([], { email:' NEW@EXAMPLE.ORG ' }).error.code, 'ACCOUNT_EXISTS'); assert.equal(f.tables.USERS.length, 2);
 });
 
 test('members can register before the school list is populated without inventing school records', () => {

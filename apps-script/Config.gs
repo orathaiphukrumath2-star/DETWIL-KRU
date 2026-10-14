@@ -1,6 +1,6 @@
 var DETWIL = DETWIL || {};
 
-DETWIL.VERSION = '0.3.0-membership-roles';
+DETWIL.VERSION = '0.3.1-school-registration';
 
 DETWIL.PROJECT = Object.freeze({
   systemName: 'DETWIL',

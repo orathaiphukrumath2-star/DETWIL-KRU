@@ -102,7 +102,7 @@ function DETWIL_register_(payload) {
   var email = DETWIL_normalizeEmail(payload.email);
   if (!DETWIL_isPasswordLoginEnabled() || String(payload.website || '')) DETWIL_workError_('VALIDATION', 'ไม่สามารถสมัครสมาชิกได้');
   if (email.length > 254 || !DETWIL_validateEmail(email)) DETWIL_workError_('VALIDATION', 'อีเมลไม่ถูกต้อง');
-  if (DETWIL_findFirstByField('USERS', 'Email', email)) DETWIL_workError_('VALIDATION', 'ไม่สามารถสมัครด้วยอีเมลนี้ได้ กรุณาเข้าสู่ระบบหรือติดต่อผู้ดูแล');
+  if (DETWIL_findFirstByField('USERS', 'Email', email)) DETWIL_workError_('ACCOUNT_EXISTS', 'อีเมลนี้มีบัญชีแล้ว กรุณาเข้าสู่ระบบบัญชีเดิม หากยังไม่มีรหัสผ่านให้ติดต่อผู้ดูแล');
   var requests = DETWIL_requestedRoles_(payload.roles);
   var user = { UserID: DETWIL_uuid(), Email: email, DisplayName: DETWIL_workText_(payload.displayName, 150, true), SchoolID: '', PrimaryRole: 'PUBLIC_VISITOR', AccountStatus: 'PENDING', CanLogin: 'TRUE', PasswordLoginEnabled: 'TRUE', AuthMode: 'PASSWORD', CreatedAt: DETWIL_nowIso(), CreatedBy: 'SELF_REGISTRATION', IsDeleted: 'FALSE' };
   var credential = DETWIL_memberCredential_(user, DETWIL_passwordMaterial_(payload), false, user.UserID);

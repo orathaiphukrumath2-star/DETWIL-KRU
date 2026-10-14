@@ -20,7 +20,11 @@ import {
   type RoleRequest,
   type School,
 } from "@/lib/works";
-import { memberApi } from "@/lib/workClient";
+import {
+  memberApi,
+  MemberApiError,
+  membershipOptionsUrl,
+} from "@/lib/workClient";
 
 const requestableRoles = [
   "TEACHER",
@@ -57,7 +61,6 @@ function RolePicker({
           <label className="checkbox-label" key={role}>
             <input
               type="checkbox"
-              disabled={needsSchool(role) && !schools.length}
               checked={chosen.includes(role)}
               onChange={(e) =>
                 update(
@@ -91,8 +94,7 @@ function RolePicker({
       )}
       {!schools.length && (
         <p className="muted">
-          ยังไม่มีโรงเรียนที่เปิดใช้งาน สมัครบัญชีไว้ก่อนได้
-          แล้วขอบทบาทโรงเรียนภายหลัง
+          ยังไม่มีรายชื่อโรงเรียนที่เปิดใช้งาน กรุณาติดต่อผู้ดูแลเพิ่มสถานศึกษา
         </p>
       )}
     </div>
@@ -104,11 +106,16 @@ export function Registration() {
   const [requests, setRequests] = useState<RoleRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [optionsError, setOptionsError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const [accountExists, setAccountExists] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/membership", { signal: controller.signal })
+    setLoading(true);
+    setOptionsError("");
+    fetch(membershipOptionsUrl, { signal: controller.signal })
       .then(async (r) => {
         const body = await r.json();
         if (!r.ok || !body.ok)
@@ -119,13 +126,15 @@ export function Registration() {
       })
       .catch((e) => {
         if (!controller.signal.aborted)
-          setError(e instanceof Error ? e.message : "โหลดข้อมูลไม่สำเร็จ");
+          setOptionsError(
+            e instanceof Error ? e.message : "โหลดข้อมูลไม่สำเร็จ",
+          );
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, []);
+  }, [retry]);
   return (
     <div className="studio-shell">
       <header className="studio-topbar">
@@ -153,6 +162,28 @@ export function Registration() {
         {error && (
           <div role="alert" className="studio-alert">
             {error}
+            {accountExists && (
+              <p>
+                <Link className="text-link" href="/studio">
+                  เข้าสู่ระบบบัญชีเดิม
+                </Link>
+                {
+                  " · หากผู้ดูแลยังไม่ได้ตั้งรหัสผ่าน ให้เปิด Apps Script แล้วเรียกใช้ DETWIL_prepareWorkSystem"
+                }
+              </p>
+            )}
+          </div>
+        )}
+        {optionsError && (
+          <div role="alert" className="studio-alert">
+            {optionsError}
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setRetry((value) => value + 1)}
+            >
+              <RotateCcw size={17} /> ลองใหม่
+            </button>
           </div>
         )}
         {done ? (
@@ -175,6 +206,17 @@ export function Registration() {
               const form = event.currentTarget;
               const data = new FormData(form);
               setError("");
+              setAccountExists(false);
+              if (
+                requests.some(
+                  (request) => needsSchool(request.role) && !request.schoolId,
+                )
+              ) {
+                setError(
+                  "กรุณาเลือกสถานศึกษาสำหรับบทบาทครูและผู้ตรวจระดับโรงเรียน",
+                );
+                return;
+              }
               if (data.get("password") !== data.get("confirm")) {
                 setError("รหัสผ่านไม่ตรงกัน");
                 return;
@@ -191,6 +233,9 @@ export function Registration() {
                 form.reset();
                 setDone(true);
               } catch (e) {
+                setAccountExists(
+                  e instanceof MemberApiError && e.code === "ACCOUNT_EXISTS",
+                );
                 setError(
                   e instanceof Error ? e.message : "สมัครสมาชิกไม่สำเร็จ",
                 );
@@ -199,11 +244,7 @@ export function Registration() {
               }
             }}
           >
-            <fieldset
-              disabled={
-                busy || loading || Boolean(error && !options.roles.length)
-              }
-            >
+            <fieldset disabled={busy}>
               <div className="form-grid">
                 <label>
                   ชื่อ-สกุล
@@ -259,7 +300,10 @@ export function Registration() {
                   <ShieldCheck size={15} />
                   รอผู้ดูแลอนุมัติสิทธิ์
                 </span>
-                <button className="primary-button">
+                <button
+                  className="primary-button"
+                  disabled={loading || Boolean(optionsError)}
+                >
                   <UserPlus size={17} />
                   {busy ? "กำลังสมัคร" : loading ? "กำลังโหลด" : "สมัครสมาชิก"}
                 </button>
@@ -289,7 +333,7 @@ export function MemberProfile({
   const [notice, setNotice] = useState("");
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/membership", { signal: controller.signal })
+    fetch(membershipOptionsUrl, { signal: controller.signal })
       .then(async (r) => {
         const body = await r.json();
         if (!body.ok)
