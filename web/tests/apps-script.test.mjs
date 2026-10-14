@@ -84,6 +84,6 @@ test('timeouts become a readable error without exposing request credentials', as
   globalThis.fetch = async () => { throw new DOMException('Sensitive URL', 'TimeoutError'); };
   const result = await getAppsScriptHealth();
   assert.equal(result.ok, false);
-  assert.match(result.error, /8/);
+  assert.match(result.error, /15/);
   assert.ok(!result.error.includes('Sensitive'));
 });

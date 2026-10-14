@@ -4,7 +4,7 @@ import { detwilProject } from "@/lib/detwil";
 import { sheetCount } from "@/lib/schema";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 15;
+export const maxDuration = 20;
 
 export async function GET() {
   const appsScript = await getAppsScriptHealth();

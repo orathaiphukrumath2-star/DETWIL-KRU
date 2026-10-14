@@ -49,7 +49,7 @@ export async function getAppsScriptHealth(): Promise<AppsScriptHealth> {
     healthUrl.searchParams.set("health", "1");
     const response = await fetch(healthUrl.toString(), {
       cache: "no-store",
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(15000),
     });
     if (!response.ok) {
       return {
@@ -107,7 +107,7 @@ export async function getAppsScriptHealth(): Promise<AppsScriptHealth> {
       ok: false,
       configured: true,
       error: error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)
-        ? "Apps Script ใช้เวลาตอบกลับเกิน 8 วินาที กรุณาลองอีกครั้ง"
+        ? "Apps Script ใช้เวลาตอบกลับเกิน 15 วินาที กรุณาลองอีกครั้ง"
         : "ไม่สามารถเชื่อม Apps Script ได้ กรุณาตรวจ URL และการเผยแพร่ Web App",
     };
   }

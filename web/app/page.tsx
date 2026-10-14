@@ -1,15 +1,12 @@
+import { Suspense } from "react";
+import { AppsScriptConnection, AppsScriptConnectionPending } from "@/components/AppsScriptConnection";
 import { StatusBadge } from "@/components/StatusBadge";
-import { getAppsScriptHealth } from "@/lib/appsScript";
 import { detwilProject, foundationSteps, lockedDecisions, moduleMap } from "@/lib/detwil";
 import { sheetCount } from "@/lib/schema";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
-  const appsScript = await getAppsScriptHealth();
-  const connectionTone = appsScript.ok ? "ready" : appsScript.configured ? "waiting" : "locked";
-  const connectionLabel = appsScript.ok ? "เชื่อมแล้ว" : appsScript.configured ? "ตรวจอีกครั้ง" : "รอ URL";
-
+export default function HomePage() {
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label="เมนูหลัก">
@@ -90,35 +87,9 @@ export default async function HomePage() {
             </div>
           </div>
 
-          <div className="panel connection-panel">
-            <div className="panel-header">
-              <h2>Apps Script Connection</h2>
-              <StatusBadge tone={connectionTone}>{connectionLabel}</StatusBadge>
-            </div>
-            <dl className="connection-list">
-              <div>
-                <dt>Web App URL</dt>
-                <dd>{appsScript.configured ? appsScript.urlHost || "ตั้งค่าแล้ว" : "ยังไม่ได้ใส่ใน .env.local"}</dd>
-              </div>
-              <div>
-                <dt>Spreadsheet</dt>
-                <dd>{appsScript.data?.spreadsheetConnected ? "เชื่อมแล้ว" : "รอตรวจ"}</dd>
-              </div>
-              <div>
-                <dt>Drive Root</dt>
-                <dd>{appsScript.data?.rootFolderConnected ? "เชื่อมแล้ว" : "รอตรวจ"}</dd>
-              </div>
-              <div>
-                <dt>Schema</dt>
-                <dd>{appsScript.data?.schemaOk ? "ผ่าน" : appsScript.error || "รอตรวจ"}</dd>
-              </div>
-            </dl>
-            {appsScript.data?.schemaProblems?.length ? (
-              <p className="connection-note">{appsScript.data.schemaProblems.slice(0, 2).join(", ")}</p>
-            ) : (
-              <p className="connection-note">{appsScript.error || "Google Sheets และ Drive พร้อมเชื่อมต่อ"}</p>
-            )}
-          </div>
+          <Suspense fallback={<AppsScriptConnectionPending />}>
+            <AppsScriptConnection />
+          </Suspense>
         </section>
 
         <section id="modules" className="module-band">
