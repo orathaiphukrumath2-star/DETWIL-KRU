@@ -1,4 +1,26 @@
 :root { --navy: #0d4e71; --teal: #138c80; --text: #203b44; --muted: #72838b; --border: #e3e9ec; --bg: #f6f8fa; --surface: #fff; }
+.registration-container { max-width: 780px; }
+.registration-brand { display: flex; align-items: center; gap: 24px; margin: 0 0 24px; }
+.registration-brand img { object-fit: contain; }
+.registration-form, .role-request-form { display: grid; gap: 24px; }
+.registration-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 28px; }
+.registration-footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 24px; }
+.registration-honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.role-picker { display: grid; gap: 16px; }
+.field-label { color: #547078; font-size: 12px; }
+.role-choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+.role-choice-grid .checkbox-label { min-height: 42px; padding: 9px 0; }
+.registration-success { display: grid; justify-items: start; gap: 20px; padding: 36px 0; border-top: 1px solid var(--border); }
+.registration-success > svg { color: #138c80; }
+.member-role-list, .member-request-list { list-style: none; margin: 0; padding: 0; }
+.member-role-list > li, .member-request-list > li { display: flex; align-items: center; gap: 14px; padding: 18px 0; border-bottom: 1px solid var(--border); }
+.member-role-list li > div, .member-request-list li > div:first-child { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.member-role-list strong, .member-request-list strong { font-size: 14px; overflow-wrap: anywhere; }
+.member-role-list span:not(.approval-badge), .member-request-list span, .member-request-list p { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.member-request-actions { display: flex; gap: 8px; }
+.role-switcher { display: grid; gap: 3px; font-size: 10px; color: var(--muted); }
+.role-switcher select { min-height: 36px; max-width: 290px; background: #fff; color: #28594f; border: 1px solid #cfdddf; border-radius: 5px; padding: 5px 8px; font-size: 12px; }
+@media(max-width:760px) { .registration-brand { gap: 12px; flex-wrap: wrap; } .registration-brand img { width: 140px; height: 79px; } .role-choice-grid { grid-template-columns: 1fr; } .studio-account { flex-wrap: wrap; } .role-switcher select { max-width: 240px; } .member-role-list > li { flex-wrap: wrap; } .member-role-list .approval-badge { margin-left: 32px; } }
 .primary-button, .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 10px 16px; border-radius: 6px; border: 1px solid transparent; font-weight: 600; font-size: 13px; text-align: center; }
 .primary-button { background: #117f75; color: #fff; }
 .primary-button:hover { background: #09665f; }

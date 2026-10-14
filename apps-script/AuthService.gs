@@ -143,7 +143,7 @@ function DETWIL_registerFailedPasswordLogin_(credential) {
 }
 
 function DETWIL_hashPassword_(password, salt, algorithm) {
-  if (algorithm !== 'SHA256_ITERATED_V1') {
+  if (['SHA256_ITERATED_V1', 'SCRYPT_SHA256_V1'].indexOf(algorithm) < 0) {
     DETWIL_raise('UNSUPPORTED_PASSWORD_ALGORITHM', 'รูปแบบการเข้ารหัสรหัสผ่านไม่รองรับ', 'Unsupported algorithm: ' + algorithm);
   }
   var props = DETWIL_getScriptProperties_();

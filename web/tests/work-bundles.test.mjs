@@ -8,7 +8,7 @@ import { sheetSchemas } from '../lib/schema.ts';
 import { isSameOrigin } from '../lib/requestSecurity.ts';
 
 function fixture() {
-  const tables = { WORKS: [], AUTH_SESSIONS: [], FILES: [], REVIEWS: [], RECORD_VERSIONS: [], WORKFLOW_LOG: [], USERS: [], AUTH_CREDENTIALS: [], SCHOOLS: [{ SchoolID: 's1', SchoolName: 'School One', Status: 'ACTIVE' }, { SchoolID: 's2', SchoolName: 'School Two', Status: 'ACTIVE' }] };
+  const tables = { WORKS: [], USER_ROLES: [{ UserRoleID: 'teacher-grant', UserID: 't1', RoleCode: 'TEACHER', ScopeType: 'SCHOOL', ScopeID: 's1', Status: 'ACTIVE' }], AUDIT_LOG: [], AUTH_SESSIONS: [], FILES: [], REVIEWS: [], RECORD_VERSIONS: [], WORKFLOW_LOG: [], USERS: [], AUTH_CREDENTIALS: [], SCHOOLS: [{ SchoolID: 's1', SchoolName: 'School One', Status: 'ACTIVE' }, { SchoolID: 's2', SchoolName: 'School Two', Status: 'ACTIVE' }] };
   const properties = {};
   const context = vm.createContext({ console, Date, JSON, Object, String, Number, Array, Error, Boolean,
     DETWIL: { SHEET_SCHEMAS: {}, PROPERTY_KEYS: {} },
@@ -21,12 +21,13 @@ function fixture() {
     DETWIL_jsonSuccess: data => ({ ok: true, data }),
     DETWIL_jsonError: (code, message) => ({ ok: false, error: { code, message } }),
     DETWIL_readAll: table => tables[table],
-    DETWIL_findFirstByField: (table, field, value) => tables[table]?.find(r => r[field] === value && r.IsDeleted !== 'TRUE') || null,
+    DETWIL_findFirstByField: (table, field, value) => { const row = tables[table]?.find(r => r[field] === value && r.IsDeleted !== 'TRUE'); return row ? JSON.parse(JSON.stringify(row)) : null; },
     DETWIL_getScriptProperties_: () => ({ getProperty: k => properties[k], setProperty: (k, v) => properties[k] = v, deleteProperty: k => delete properties[k] }),
     Utilities: { DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' }, computeDigest: (_a, value) => createHash('sha256').update(value).digest(), base64Encode: value => Buffer.from(value).toString('base64') },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
   });
   vm.runInContext(readFileSync(new URL('../../apps-script/WorkService.gs', import.meta.url), 'utf8'), context);
+  vm.runInContext(readFileSync(new URL('../../apps-script/MembershipService.gs', import.meta.url), 'utf8'), context);
   context.DETWIL_workWrite_ = (table, row, id) => { const index = id ? tables[table].findIndex(r => r[id] === row[id]) : -1; const clone = JSON.parse(JSON.stringify(row)); if (index >= 0) tables[table][index] = clone; else tables[table].push(clone); };
   const teacher = { UserID: 't1', DisplayName: 'Teacher One', SchoolID: 's1', PrimaryRole: 'TEACHER' };
   const reviewer = { UserID: 'r1', SchoolID: 's1', PrimaryRole: 'SCHOOL_ADMIN' };

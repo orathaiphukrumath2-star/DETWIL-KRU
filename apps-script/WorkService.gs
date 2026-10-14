@@ -99,29 +99,33 @@ function DETWIL_checkNewPassword_(password) {
   if (typeof password !== 'string' || password.length < 12 || password.length > 128) DETWIL_workError_('VALIDATION', 'รหัสผ่านต้องมี 12–128 ตัวอักษร');
 }
 
-function DETWIL_sessionUser_(token, allowPasswordChange) {
+function DETWIL_sessionUser_(token, allowPasswordChange, allowNoRole) {
   if (!token || typeof token !== 'string' || token.length > 200) DETWIL_workError_('UNAUTHORIZED', 'กรุณาเข้าสู่ระบบ');
   var session = DETWIL_findFirstByField('AUTH_SESSIONS', 'TokenHash', DETWIL_workHash_(token));
   if (!session || !isFinite(new Date(session.ExpiresAt).getTime()) || new Date(session.ExpiresAt).getTime() <= Date.now() || !DETWIL_isPasswordLoginEnabled()) DETWIL_workError_('UNAUTHORIZED', 'หมดเวลาเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่');
   var user = DETWIL_findFirstByField('USERS', 'UserID', session.UserID);
-  if (!user || user.AccountStatus !== 'ACTIVE' || !DETWIL_bool(user.CanLogin) || (user.StartDate && new Date(user.StartDate).getTime() > Date.now()) || (user.EndDate && new Date(user.EndDate).getTime() < Date.now())) DETWIL_workError_('FORBIDDEN', 'บัญชีนี้ไม่สามารถเข้าใช้งานได้');
+  if (!user || ['ACTIVE', 'PENDING'].indexOf(user.AccountStatus) < 0 || !DETWIL_bool(user.CanLogin) || (user.StartDate && new Date(user.StartDate).getTime() > Date.now()) || (user.EndDate && new Date(user.EndDate).getTime() < Date.now())) DETWIL_workError_('FORBIDDEN', 'บัญชีนี้ไม่สามารถเข้าใช้งานได้');
   var credential = DETWIL_findFirstByField('AUTH_CREDENTIALS', 'UserID', user.UserID);
   if (!credential || credential.CredentialStatus !== 'ACTIVE' || !DETWIL_bool(user.PasswordLoginEnabled)) DETWIL_workError_('UNAUTHORIZED', 'บัญชีนี้ไม่ได้เปิดใช้รหัสผ่าน');
   user.mustChangePassword = DETWIL_bool(credential.MustChangePassword);
   if (user.mustChangePassword && !allowPasswordChange) DETWIL_workError_('PASSWORD_CHANGE_REQUIRED', 'กรุณาเปลี่ยนรหัสผ่านชั่วคราวก่อนใช้งาน');
+  user = DETWIL_memberContext_(user, session);
+  if (!allowNoRole && (user.AccountStatus !== 'ACTIVE' || !user._activeRoleId)) DETWIL_workError_('FORBIDDEN', 'กรุณารออนุมัติหรือเลือกบทบาทที่มีสิทธิ์ใช้งาน');
   return user;
 }
 
 function DETWIL_identity_(user) {
-  return { userId: user.UserID, email: user.Email, displayName: user.DisplayName, role: user.PrimaryRole, schoolId: user.SchoolID, mustChangePassword: Boolean(user.mustChangePassword) };
+  return DETWIL_memberIdentity_(user);
 }
 
 function DETWIL_workLogin_(payload) {
-  if (typeof payload.password !== 'string' || payload.password.length > 128 || String(payload.email || '').length > 254 || !DETWIL_isPasswordLoginEnabled()) DETWIL_workError_('INVALID_CREDENTIALS', 'อีเมลหรือรหัสผ่านไม่ถูกต้อง หรือบัญชียังไม่พร้อมใช้งาน');
+  if (String(payload.password || '').length > 128 || String(payload.email || '').length > 254 || !DETWIL_isPasswordLoginEnabled()) DETWIL_workError_('INVALID_CREDENTIALS', 'อีเมลหรือรหัสผ่านไม่ถูกต้อง หรือบัญชียังไม่พร้อมใช้งาน');
   var user = DETWIL_findFirstByField('USERS', 'Email', DETWIL_normalizeEmail(payload.email));
   var cred = user && DETWIL_findFirstByField('AUTH_CREDENTIALS', 'UserID', user.UserID);
-  if (!user || user.AccountStatus !== 'ACTIVE' || !DETWIL_bool(user.CanLogin) || !DETWIL_bool(user.PasswordLoginEnabled) || !cred || cred.CredentialStatus !== 'ACTIVE' || (cred.LockedUntil && new Date(cred.LockedUntil).getTime() > Date.now()) || (user.StartDate && new Date(user.StartDate).getTime() > Date.now()) || (user.EndDate && new Date(user.EndDate).getTime() < Date.now())) DETWIL_workError_('INVALID_CREDENTIALS', 'อีเมลหรือรหัสผ่านไม่ถูกต้อง หรือบัญชียังไม่พร้อมใช้งาน');
-  if (DETWIL_hashPassword_(payload.password, cred.PasswordSalt, cred.PasswordAlgorithm) !== cred.PasswordHash) {
+  if (!user || ['ACTIVE', 'PENDING'].indexOf(user.AccountStatus) < 0 || !DETWIL_bool(user.CanLogin) || !DETWIL_bool(user.PasswordLoginEnabled) || !cred || cred.CredentialStatus !== 'ACTIVE' || (cred.LockedUntil && new Date(cred.LockedUntil).getTime() > Date.now()) || (user.StartDate && new Date(user.StartDate).getTime() > Date.now()) || (user.EndDate && new Date(user.EndDate).getTime() < Date.now())) DETWIL_workError_('INVALID_CREDENTIALS', 'อีเมลหรือรหัสผ่านไม่ถูกต้อง หรือบัญชียังไม่พร้อมใช้งาน');
+  var passwordValue = cred.PasswordAlgorithm === 'SCRYPT_SHA256_V1' ? payload.passwordProof : payload.password;
+  if (cred.PasswordAlgorithm === 'SCRYPT_SHA256_V1' && (typeof passwordValue !== 'string' || !/^[A-Za-z0-9+/]{43}=$/.test(passwordValue))) DETWIL_workError_('INVALID_CREDENTIALS', 'อีเมลหรือรหัสผ่านไม่ถูกต้อง');
+  if (!passwordValue || DETWIL_hashPassword_(passwordValue, cred.PasswordSalt, cred.PasswordAlgorithm) !== cred.PasswordHash) {
     cred.FailedLoginCount = Number(cred.FailedLoginCount || 0) + 1;
     cred.LastFailedLoginAt = DETWIL_nowIso();
     if (cred.FailedLoginCount >= 5) cred.LockedUntil = new Date(Date.now() + 900000).toISOString();
@@ -129,13 +133,23 @@ function DETWIL_workLogin_(payload) {
     DETWIL_workError_('INVALID_CREDENTIALS', 'อีเมลหรือรหัสผ่านไม่ถูกต้อง หรือบัญชียังไม่พร้อมใช้งาน');
   }
   cred.FailedLoginCount = 0; cred.LockedUntil = ''; cred.LastFailedLoginAt = '';
+  if (cred.PasswordAlgorithm === 'SHA256_ITERATED_V1' && typeof payload.passwordProof === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(payload.passwordProof)) {
+    cred.PasswordSalt = DETWIL_uuid() + DETWIL_uuid();
+    cred.PasswordAlgorithm = 'SCRYPT_SHA256_V1';
+    cred.PasswordHash = DETWIL_hashPassword_(payload.passwordProof, cred.PasswordSalt, cred.PasswordAlgorithm);
+    cred.PasswordUpdatedAt = DETWIL_nowIso();
+  }
   DETWIL_workWrite_('AUTH_CREDENTIALS', cred, 'CredentialID');
   user.LastLoginAt = DETWIL_nowIso(); user.LoginCount = Number(user.LoginCount || 0) + 1;
   DETWIL_workWrite_('USERS', user, 'UserID');
   var sessionToken = DETWIL_uuid() + DETWIL_uuid();
-  DETWIL_workWrite_('AUTH_SESSIONS', { SessionID: DETWIL_uuid(), TokenHash: DETWIL_workHash_(sessionToken), UserID: user.UserID, ExpiresAt: new Date(Date.now() + 28800000).toISOString(), CreatedAt: DETWIL_nowIso(), IsDeleted: 'FALSE' });
+  var maxAge = payload.remember === true ? 2592000 : 28800;
+  var session = { SessionID: DETWIL_uuid(), TokenHash: DETWIL_workHash_(sessionToken), UserID: user.UserID, ExpiresAt: new Date(Date.now() + maxAge * 1000).toISOString(), CreatedAt: DETWIL_nowIso(), IsDeleted: 'FALSE', ActiveRoleID: '' };
+  user = DETWIL_memberContext_(user, session);
+  session.ActiveRoleID = user._activeRoleId;
+  DETWIL_workWrite_('AUTH_SESSIONS', session);
   user.mustChangePassword = DETWIL_bool(cred.MustChangePassword);
-  return { token: sessionToken, user: DETWIL_identity_(user) };
+  return { token: sessionToken, user: DETWIL_identity_(user), maxAge: maxAge };
 }
 
 function DETWIL_areaRole_(user) { return ['SUPER_ADMIN', 'AREA_ADMIN', 'SUPERVISOR'].indexOf(user.PrimaryRole) >= 0; }
@@ -311,7 +325,8 @@ function DETWIL_workApi_(action, payload, token) {
       lock = LockService.getScriptLock(); lock.waitLock(30000);
       return DETWIL_jsonSuccess(DETWIL_workLogin_(payload));
     }
-    var user = DETWIL_sessionUser_(token, ['session', 'logout', 'changePassword'].indexOf(action) >= 0);
+    var limited = ['session', 'logout', 'changePassword'].indexOf(action) >= 0;
+    var user = DETWIL_sessionUser_(token, limited, limited);
     if (action === 'session') return DETWIL_jsonSuccess(DETWIL_identity_(user));
     if (action === 'logout') {
       var session = DETWIL_findFirstByField('AUTH_SESSIONS', 'TokenHash', DETWIL_workHash_(token));
@@ -320,11 +335,13 @@ function DETWIL_workApi_(action, payload, token) {
     }
     if (action === 'changePassword') {
       lock = LockService.getScriptLock(); lock.waitLock(30000);
-      DETWIL_checkNewPassword_(payload.password);
+      var material = DETWIL_passwordMaterial_(payload);
+      if (DETWIL_normalizeEmail(payload.email) !== user.Email) DETWIL_workError_('VALIDATION', 'อีเมลบัญชีไม่ตรงกัน');
       var cred = DETWIL_findFirstByField('AUTH_CREDENTIALS', 'UserID', user.UserID);
-      if (DETWIL_hashPassword_(payload.currentPassword, cred.PasswordSalt, cred.PasswordAlgorithm) !== cred.PasswordHash) DETWIL_workError_('INVALID_CREDENTIALS', 'รหัสผ่านเดิมไม่ถูกต้อง');
+      var current = cred.PasswordAlgorithm === 'SCRYPT_SHA256_V1' ? payload.currentProof : payload.currentPassword;
+      if (!current || DETWIL_hashPassword_(current, cred.PasswordSalt, cred.PasswordAlgorithm) !== cred.PasswordHash) DETWIL_workError_('INVALID_CREDENTIALS', 'รหัสผ่านเดิมไม่ถูกต้อง');
       var salt = DETWIL_uuid() + DETWIL_uuid();
-      Object.assign(cred, { PasswordSalt: salt, PasswordHash: DETWIL_hashPassword_(payload.password, salt, cred.PasswordAlgorithm), MustChangePassword: 'FALSE', PasswordUpdatedAt: DETWIL_nowIso() });
+      Object.assign(cred, { PasswordSalt: salt, PasswordAlgorithm: material.algorithm, PasswordHash: DETWIL_hashPassword_(material.value, salt, material.algorithm), MustChangePassword: 'FALSE', PasswordUpdatedAt: DETWIL_nowIso() });
       DETWIL_workWrite_('AUTH_CREDENTIALS', cred, 'CredentialID');
       DETWIL_readAll('AUTH_SESSIONS').filter(function(s) { return s.UserID === user.UserID; }).forEach(function(s) { s.IsDeleted = 'TRUE'; DETWIL_workWrite_('AUTH_SESSIONS', s, 'SessionID'); });
       return DETWIL_jsonSuccess({ changed: true });
@@ -343,24 +360,27 @@ function DETWIL_workApi_(action, payload, token) {
     }
     if (action === 'adminData') {
       if (user.PrimaryRole !== 'SUPER_ADMIN') DETWIL_workError_('FORBIDDEN', 'เฉพาะผู้ดูแลระบบ');
-      return DETWIL_jsonSuccess({ schools: DETWIL_readAll('SCHOOLS').filter(function(s) { return !DETWIL_bool(s.IsDeleted); }).map(function(s) { return { id: s.SchoolID, name: s.SchoolName, code: s.SchoolCode }; }), users: DETWIL_readAll('USERS').filter(function(u) { return !DETWIL_bool(u.IsDeleted); }).map(DETWIL_identity_) });
+      var schools = DETWIL_readAll('SCHOOLS').filter(function(s) { return !DETWIL_bool(s.IsDeleted); });
+      var grants = DETWIL_readAll('USER_ROLES');
+      return DETWIL_jsonSuccess({ schools: schools.map(function(s) { return { id: s.SchoolID, name: s.SchoolName, code: s.SchoolCode }; }), users: DETWIL_readAll('USERS').filter(function(u) { return !DETWIL_bool(u.IsDeleted); }).map(function(u) { return DETWIL_memberIdentity_(u, DETWIL_memberRoles_(u.UserID, grants, schools)); }) });
     }
     if (action === 'createUser') {
       lock = LockService.getScriptLock(); lock.waitLock(30000);
       if (user.PrimaryRole !== 'SUPER_ADMIN') DETWIL_workError_('FORBIDDEN', 'เฉพาะผู้ดูแลระบบ');
-      DETWIL_checkNewPassword_(payload.password);
+      var newMaterial = DETWIL_passwordMaterial_(payload);
       var email = DETWIL_normalizeEmail(payload.email);
       if (!DETWIL_validateEmail(email) || DETWIL_findFirstByField('USERS', 'Email', email)) DETWIL_workError_('VALIDATION', 'อีเมลไม่ถูกต้องหรือมีบัญชีนี้แล้ว');
       if (['TEACHER', 'SCHOOL_ADMIN', 'AREA_ADMIN', 'SUPERVISOR'].indexOf(payload.role) < 0) DETWIL_workError_('VALIDATION', 'บทบาทไม่ถูกต้อง');
       if (['TEACHER', 'SCHOOL_ADMIN'].indexOf(payload.role) >= 0 && !DETWIL_findFirstByField('SCHOOLS', 'SchoolID', payload.schoolId)) DETWIL_workError_('VALIDATION', 'กรุณาระบุโรงเรียน');
-      var newUser = { UserID: DETWIL_uuid(), Email: email, DisplayName: DETWIL_workText_(payload.displayName, 150, true), PrimaryRole: payload.role, SchoolID: String(payload.schoolId || ''), CanLogin: 'TRUE', PasswordLoginEnabled: 'TRUE', AuthMode: 'PASSWORD', AccountStatus: 'ACTIVE', CreatedAt: DETWIL_nowIso(), CreatedBy: user.UserID, IsDeleted: 'FALSE' };
-      var newSalt = DETWIL_uuid() + DETWIL_uuid();
-      DETWIL_workWrite_('AUTH_CREDENTIALS', { CredentialID: DETWIL_uuid(), UserID: newUser.UserID, Email: email, PasswordHash: DETWIL_hashPassword_(payload.password, newSalt, 'SHA256_ITERATED_V1'), PasswordSalt: newSalt, PasswordAlgorithm: 'SHA256_ITERATED_V1', PasswordUpdatedAt: DETWIL_nowIso(), MustChangePassword: 'TRUE', CredentialStatus: 'ACTIVE', CreatedAt: DETWIL_nowIso(), CreatedBy: user.UserID, IsDeleted: 'FALSE' });
+      var schoolScoped = ['TEACHER', 'SCHOOL_ADMIN'].indexOf(payload.role) >= 0;
+      var newUser = { UserID: DETWIL_uuid(), Email: email, DisplayName: DETWIL_workText_(payload.displayName, 150, true), PrimaryRole: payload.role, SchoolID: schoolScoped ? String(payload.schoolId || '') : '', CanLogin: 'TRUE', PasswordLoginEnabled: 'TRUE', AuthMode: 'PASSWORD', AccountStatus: 'ACTIVE', CreatedAt: DETWIL_nowIso(), CreatedBy: user.UserID, IsDeleted: 'FALSE' };
+      DETWIL_workWrite_('AUTH_CREDENTIALS', DETWIL_memberCredential_(newUser, newMaterial, true, user.UserID));
       DETWIL_workWrite_('USERS', newUser);
       DETWIL_workWrite_('USER_ROLES', { UserRoleID: DETWIL_uuid(), UserID: newUser.UserID, RoleCode: newUser.PrimaryRole, ScopeType: newUser.SchoolID ? 'SCHOOL' : 'GLOBAL', ScopeID: newUser.SchoolID || 'DETWIL', Status: 'ACTIVE', CreatedAt: DETWIL_nowIso(), CreatedBy: user.UserID, IsDeleted: 'FALSE' });
       return DETWIL_jsonSuccess(DETWIL_identity_(newUser));
     }
     lock = LockService.getScriptLock(); lock.waitLock(30000);
+    user = DETWIL_sessionUser_(token, false);
     if (action === 'saveSchool') {
       if (user.PrimaryRole !== 'SUPER_ADMIN') DETWIL_workError_('FORBIDDEN', 'เฉพาะผู้ดูแลระบบ');
       var code = DETWIL_workText_(payload.code, 30, true);

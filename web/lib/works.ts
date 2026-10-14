@@ -67,7 +67,36 @@ export type Identity = {
   role: string;
   schoolId: string;
   mustChangePassword: boolean;
+  accountStatus: string;
+  activeRoleId: string;
+  roles: MemberRole[];
 };
+export type MemberRole = {
+  id: string;
+  role: string;
+  scopeType: string;
+  schoolId: string;
+  schoolName: string;
+  status: string;
+  usable: boolean;
+  startDate: string;
+  endDate: string;
+};
+export const roleLabels: Record<string, string> = {
+  TEACHER: "ครู / ผู้จัดทำผลงาน",
+  SCHOOL_ADMIN: "ผู้ตรวจระดับโรงเรียน",
+  SUPERVISOR: "ศึกษานิเทศก์ / ผู้ตรวจระดับเขต",
+  AREA_ADMIN: "ผู้ดูแลระดับเขต",
+  SUPER_ADMIN: "ผู้ดูแลระบบ",
+  PUBLIC_VISITOR: "สมาชิกทั่วไป",
+};
+export const roleStatusLabels: Record<string, string> = {
+  PENDING: "รออนุมัติ",
+  ACTIVE: "อนุมัติแล้ว",
+  REJECTED: "ไม่อนุมัติ",
+  REVOKED: "ถอนสิทธิ์แล้ว",
+};
+export type RoleRequest = { role: string; schoolId: string };
 export type School = { id: string; name: string; code?: string };
 export type PublicSummary = {
   id: string;

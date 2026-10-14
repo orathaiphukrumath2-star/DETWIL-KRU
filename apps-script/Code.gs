@@ -29,6 +29,8 @@ function doPost(e) {
       result = DETWIL_workApi_(action, payload, body.token);
     } else if (DETWIL_WORK_ACTIONS.indexOf(action) !== -1) {
       result = DETWIL_workApi_(action, payload, body.token);
+    } else if (DETWIL_MEMBER_ACTIONS.indexOf(action) !== -1) {
+      result = DETWIL_memberApi_(action, payload, body.token);
     } else {
       result = DETWIL_jsonError('UNKNOWN_ACTION', 'ไม่พบคำสั่งที่ร้องขอ', { action: action });
     }

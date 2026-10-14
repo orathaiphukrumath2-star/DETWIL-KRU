@@ -32,21 +32,11 @@ import {
   type School,
   type Work,
   type WorkContent,
+  roleLabels,
 } from "@/lib/works";
+import { MemberAdmin, MemberProfile } from "@/components/Membership";
+import { memberApi as api } from "@/lib/workClient";
 
-async function api<T>(action: string, payload: unknown = {}): Promise<T> {
-  const response = await fetch("/api/works", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, payload }),
-  });
-  const result = await response.json();
-  if (!response.ok || !result.ok)
-    throw new Error(
-      result?.error?.message || "ไม่สามารถดำเนินการได้ กรุณาลองใหม่",
-    );
-  return result.data as T;
-}
 const blankContent = (): WorkContent => ({
   title: "",
   subject: "",
@@ -121,11 +111,15 @@ export function Studio() {
       .then(async (identity) => {
         if (!active) return;
         setUser(identity);
-        if (!identity.mustChangePassword) {
+        if (
+          !identity.mustChangePassword &&
+          identity.accountStatus === "ACTIVE" &&
+          identity.activeRoleId
+        ) {
           await loadList();
           const id = new URLSearchParams(window.location.search).get("id");
           if (id) await openWork(id);
-        }
+        } else setTab("profile");
       })
       .catch(() => {})
       .finally(() => {
@@ -170,14 +164,20 @@ export function Studio() {
       const identity = await api<Identity>("passwordLogin", {
         email: data.get("email"),
         password: data.get("password"),
+        remember: data.get("remember") === "on",
       });
       form.reset();
       setUser(identity);
-      if (!identity.mustChangePassword) {
+      if (
+        !identity.mustChangePassword &&
+        identity.accountStatus === "ACTIVE" &&
+        identity.activeRoleId
+      ) {
+        setTab("mine");
         await loadList();
         const id = new URLSearchParams(window.location.search).get("id");
         if (id) await openWork(id);
-      }
+      } else setTab("profile");
     });
   }
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -282,6 +282,14 @@ export function Studio() {
     selected?.approvalStatus || "",
   );
   const readonly = !owner || pending;
+  async function updateMembership(action: string, payload: unknown) {
+    return await perform(async () => {
+      await api(action, payload);
+      setAdmin(await api<AdminData>("adminData"));
+      await loadList();
+      setNotice("บันทึกข้อมูลสมาชิกแล้ว");
+    });
+  }
 
   return (
     <div className="studio-shell">
@@ -293,6 +301,39 @@ export function Studio() {
           {user && (
             <>
               <span>{user.displayName}</span>
+              <label className="role-switcher">
+                <span>บทบาทที่ใช้งาน</span>
+                <select
+                  aria-label="สลับบทบาท"
+                  value={user.activeRoleId || ""}
+                  disabled={busy || user.mustChangePassword}
+                  onChange={(event) => {
+                    const roleId = event.target.value;
+                    if (!leaveEditor()) return;
+                    void perform(async () => {
+                      const identity = await api<Identity>("switchRole", {
+                        roleId,
+                      });
+                      setUser(identity);
+                      setTab("mine");
+                      setOffset(0);
+                      await loadList();
+                    });
+                  }}
+                >
+                  {!user.activeRoleId && (
+                    <option value="">เลือกบทบาทที่อนุมัติแล้ว</option>
+                  )}
+                  {user.roles
+                    ?.filter((role) => role.usable)
+                    .map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {roleLabels[role.role] || role.role}
+                        {role.schoolName ? ` · ${role.schoolName}` : ""}
+                      </option>
+                    ))}
+                </select>
+              </label>
               <button
                 className="icon-button"
                 title="ออกจากระบบ"
@@ -386,6 +427,10 @@ export function Studio() {
                   maxLength={128}
                 />
               </label>
+              <label className="checkbox-label">
+                <input type="checkbox" name="remember" />
+                จำการเข้าสู่ระบบ 30 วัน (อุปกรณ์ส่วนตัว)
+              </label>
               <button className="primary-button" disabled={busy}>
                 {busy ? (
                   <LoaderCircle className="spin" size={18} />
@@ -394,6 +439,11 @@ export function Studio() {
                 )}
                 เข้าสู่ระบบ
               </button>
+              <Link href="/register" className="secondary-button">
+                <UsersRound size={17} />
+                สมัครสมาชิก
+              </Link>
+              <span className="muted">ลืมรหัสผ่าน: ติดต่อผู้ดูแลระบบ</span>
               <a
                 className="text-link"
                 href="https://script.google.com/u/0/home/projects/1bdeBVjaQoTJ7sqkRI_7xxfmRbfQYaOw33066v1gtc5oaIG-RYKcMTmWP/edit"
@@ -415,6 +465,7 @@ export function Studio() {
                 if (values.get("password") !== values.get("confirm"))
                   throw new Error("รหัสผ่านใหม่ไม่ตรงกัน");
                 await api("changePassword", {
+                  email: user.email,
                   currentPassword: values.get("current"),
                   password: values.get("password"),
                 });
@@ -462,6 +513,28 @@ export function Studio() {
               บันทึกรหัสผ่าน
             </button>
           </form>
+        ) : user.accountStatus !== "ACTIVE" || !user.activeRoleId ? (
+          <>
+            <div className="studio-heading">
+              <div>
+                <span className="section-kicker">MEMBERSHIP</span>
+                <h1>บัญชีและบทบาทของฉัน</h1>
+              </div>
+            </div>
+            <div className="studio-notice">
+              <ShieldCheck size={18} />
+              รอผู้ดูแลอนุมัติบทบาท หรือเลือกบทบาทที่อนุมัติแล้วก่อนจัดทำผลงาน
+            </div>
+            <MemberProfile
+              user={user}
+              onUser={setUser}
+              onError={setError}
+              onPasswordChanged={() => {
+                setUser(null);
+                setNotice("เปลี่ยนรหัสผ่านแล้ว กรุณาเข้าสู่ระบบใหม่");
+              }}
+            />
+          </>
         ) : (
           <>
             <div className="studio-heading">
@@ -499,6 +572,7 @@ export function Studio() {
                 <nav className="studio-tabs" aria-label="พื้นที่ทำงาน">
                   {[
                     { id: "mine", label: "ผลงานของฉัน", icon: BookOpen },
+                    { id: "profile", label: "บัญชีและบทบาท", icon: UsersRound },
                     ...([
                       "SCHOOL_ADMIN",
                       "SUPER_ADMIN",
@@ -534,7 +608,8 @@ export function Studio() {
                         void perform(async () => {
                           if (id === "admin")
                             setAdmin(await api<AdminData>("adminData"));
-                          else await loadList(id === "queue");
+                          else if (id !== "profile")
+                            await loadList(id === "queue");
                         });
                       }}
                     >
@@ -544,16 +619,34 @@ export function Studio() {
                   ))}
                 </nav>
                 {tab === "admin" ? (
-                  <AdminPanel
-                    data={admin}
-                    busy={busy}
-                    onSubmit={async (action, payload) => {
-                      return await perform(async () => {
-                        await api(action, payload);
-                        setAdmin(await api<AdminData>("adminData"));
-                        await loadList();
-                        setNotice("บันทึกข้อมูลแล้ว");
-                      });
+                  <>
+                    <MemberAdmin
+                      users={admin.users}
+                      schools={admin.schools}
+                      busy={busy}
+                      onSubmit={updateMembership}
+                    />
+                    <AdminPanel
+                      data={admin}
+                      busy={busy}
+                      onSubmit={async (action, payload) => {
+                        return await perform(async () => {
+                          await api(action, payload);
+                          setAdmin(await api<AdminData>("adminData"));
+                          await loadList();
+                          setNotice("บันทึกข้อมูลแล้ว");
+                        });
+                      }}
+                    />
+                  </>
+                ) : tab === "profile" ? (
+                  <MemberProfile
+                    user={user}
+                    onUser={setUser}
+                    onError={setError}
+                    onPasswordChanged={() => {
+                      setUser(null);
+                      setNotice("เปลี่ยนรหัสผ่านแล้ว กรุณาเข้าสู่ระบบใหม่");
                     }}
                   />
                 ) : (
@@ -1240,7 +1333,9 @@ function AdminPanel({
             void onSubmit("saveSchool", {
               code: values.get("code"),
               name: values.get("name"),
-            }).then((ok) => { if (ok) form.reset(); });
+            }).then((ok) => {
+              if (ok) form.reset();
+            });
           }}
         >
           <label>
@@ -1285,7 +1380,9 @@ function AdminPanel({
               password: values.get("password"),
             }).then((ok) => {
               if (ok) {
-                (form.elements.namedItem("password") as HTMLInputElement).value = "";
+                (
+                  form.elements.namedItem("password") as HTMLInputElement
+                ).value = "";
               }
             });
           }}

@@ -1,6 +1,6 @@
 var DETWIL = DETWIL || {};
 
-DETWIL.VERSION = '0.2.0-work-bundles';
+DETWIL.VERSION = '0.3.0-membership-roles';
 
 DETWIL.PROJECT = Object.freeze({
   systemName: 'DETWIL',
@@ -76,7 +76,7 @@ DETWIL.SHEET_NAMES = Object.freeze({
 DETWIL.SHEET_SCHEMAS = Object.freeze({
   SETTINGS: ['SettingKey', 'SettingValue', 'ValueType', 'Description', 'IsSecret', 'UpdatedAt', 'UpdatedBy'],
   WORKS: ['WorkID', 'OwnerUserID', 'SchoolID', 'AuthorName', 'SchoolName', 'Title', 'Subject', 'GradeLevel', 'AcademicYear', 'WorkType', 'ContentJson', 'CurrentVersionID', 'VersionNo', 'ApprovalStatus', 'IsPublic', 'PublishedVersionID', 'PublishedJson', 'CreatedAt', 'UpdatedAt', 'IsDeleted'],
-  AUTH_SESSIONS: ['SessionID', 'TokenHash', 'UserID', 'ExpiresAt', 'CreatedAt', 'IsDeleted'],
+  AUTH_SESSIONS: ['SessionID', 'TokenHash', 'UserID', 'ExpiresAt', 'CreatedAt', 'IsDeleted', 'ActiveRoleID'],
   USERS: ['UserID', 'Email', 'DisplayName', 'SchoolID', 'PrimaryRole', 'AccountStatus', 'CanLogin', 'AuthMode', 'PasswordLoginEnabled', 'LastLoginAt', 'LoginCount', 'StartDate', 'EndDate', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'IsDeleted', 'DeletedAt', 'DeletedBy'],
   USER_ROLES: ['UserRoleID', 'UserID', 'RoleCode', 'ScopeType', 'ScopeID', 'StartDate', 'EndDate', 'Status', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'IsDeleted'],
   AUTH_CREDENTIALS: ['CredentialID', 'UserID', 'Email', 'PasswordHash', 'PasswordSalt', 'PasswordAlgorithm', 'PasswordUpdatedAt', 'MustChangePassword', 'FailedLoginCount', 'LockedUntil', 'LastFailedLoginAt', 'LastPasswordResetAt', 'ResetBy', 'CredentialStatus', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'IsDeleted'],

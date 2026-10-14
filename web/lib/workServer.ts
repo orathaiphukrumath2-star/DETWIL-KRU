@@ -60,11 +60,13 @@ export function errorResponse(error: unknown) {
         ? 403
         : code === "NOT_FOUND"
           ? 404
-          : code === "CONFLICT"
-            ? 409
-            : ["VALIDATION", "INVALID_STATE"].includes(code)
-              ? 400
-              : 503;
+          : code === "RATE_LIMIT"
+            ? 429
+            : code === "CONFLICT"
+              ? 409
+              : ["VALIDATION", "INVALID_STATE"].includes(code)
+                ? 400
+                : 503;
   return Response.json(
     { ok: false, error: { code, message } },
     { status, headers: { "Cache-Control": "no-store" } },
