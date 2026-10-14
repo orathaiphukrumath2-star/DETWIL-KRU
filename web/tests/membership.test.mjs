@@ -8,7 +8,7 @@ import { allowAuthAttempt, passwordProof, preparePasswordPayload } from '../lib/
 const proof = Buffer.alloc(32, 1).toString('base64');
 const replacementProof = Buffer.alloc(32, 2).toString('base64');
 function fixture() {
-  const tables = { USERS: [], USER_ROLES: [], AUTH_CREDENTIALS: [], AUTH_SESSIONS: [], AUDIT_LOG: [], WORKS: [], WORKFLOW_LOG: [], SCHOOLS: [{ SchoolID: 's1', SchoolName: 'School One', Status: 'ACTIVE' }, { SchoolID: 's2', SchoolName: 'School Two', Status: 'ACTIVE' }] };
+  const tables = { USERS: [], USER_ROLES: [], AUTH_CREDENTIALS: [], AUTH_SESSIONS: [], AUDIT_LOG: [], WORKS: [], WORKFLOW_LOG: [], FILES: [], RECORD_VERSIONS: [], SCHOOLS: [{ SchoolID: 's1', SchoolName: 'School One', Status: 'ACTIVE' }, { SchoolID: 's2', SchoolName: 'School Two', Status: 'ACTIVE' }] };
   const clone = row => row ? JSON.parse(JSON.stringify(row)) : null;
   const context = vm.createContext({ console, Date, JSON, Object, String, Number, Array, Boolean, Error,
     DETWIL: { SHEET_SCHEMAS: { AUTH_SESSIONS: ['SessionID','TokenHash','UserID','ExpiresAt','CreatedAt','IsDeleted','ActiveRoleID'] }, PROPERTY_KEYS: {} },
@@ -35,13 +35,16 @@ function fixture() {
   return { context, tables, grant, account, admin, adminToken, login, register };
 }
 
-test('self registration stores only a salted hash and pending roles, never auto-grants admin access', () => {
+test('self registration activates basic teacher access immediately, but never grants reviewer or admin access', () => {
   const f = fixture(); assert.equal(f.register([{ role:'TEACHER',schoolId:'s1' },{ role:'SCHOOL_ADMIN',schoolId:'s1' }], { PrimaryRole:'SUPER_ADMIN', status:'ACTIVE', password:'not-stored' }).ok, true);
-  const user = f.tables.USERS.find(u => u.Email === 'new@example.org'); assert.equal(user.PrimaryRole, 'PUBLIC_VISITOR'); assert.equal(user.AccountStatus, 'PENDING');
-  const roles = f.tables.USER_ROLES.filter(r => r.UserID === user.UserID); assert.equal(roles.length, 2); assert.ok(roles.every(r => r.Status === 'PENDING'));
+  const user = f.tables.USERS.find(u => u.Email === 'new@example.org'); assert.equal(user.PrimaryRole, 'TEACHER'); assert.equal(user.AccountStatus, 'ACTIVE');
+  const roles = f.tables.USER_ROLES.filter(r => r.UserID === user.UserID); assert.equal(roles.length, 2); assert.equal(roles.find(r => r.RoleCode === 'TEACHER').Status, 'ACTIVE'); assert.equal(roles.find(r => r.RoleCode === 'SCHOOL_ADMIN').Status, 'PENDING');
   const credential = f.tables.AUTH_CREDENTIALS.find(c => c.UserID === user.UserID); assert.equal(credential.PasswordAlgorithm, 'SCRYPT_SHA256_V1'); assert.notEqual(credential.PasswordHash, proof); assert.ok(credential.PasswordSalt);
   assert.equal(JSON.stringify(f.tables).includes('not-stored'), false);
-  const token = f.login(user).data.token; assert.equal(f.context.DETWIL_workApi_('session', {}, token).ok, true); assert.equal(f.context.DETWIL_workApi_('myWorks', {}, token).error.code, 'FORBIDDEN');
+  const token = f.login(user).data.token; assert.equal(f.context.DETWIL_workApi_('session', {}, token).ok, true); assert.equal(f.context.DETWIL_workApi_('myWorks', {}, token).ok, true);
+  const saved=f.context.DETWIL_workApi_('saveWork',{content:{title:'New member draft',subject:'Math',gradeLevel:'M1',academicYear:'2569',workType:'lesson',description:'Learning activity',attachments:[]}},token);
+  assert.equal(saved.ok,true,JSON.stringify(saved)); assert.equal(saved.data.approvalStatus,'DRAFT'); assert.equal(saved.data.isPublic,false);
+  assert.equal(f.context.DETWIL_memberApi_('switchRole', {roleId:roles.find(r => r.RoleCode === 'SCHOOL_ADMIN').UserRoleID}, token).ok, false);
 });
 
 test('duplicate emails and self-requested SUPER_ADMIN are rejected without creating extra users', () => {
@@ -49,9 +52,9 @@ test('duplicate emails and self-requested SUPER_ADMIN are rejected without creat
   assert.equal(f.register().ok, true); assert.equal(f.register([], { email:' NEW@EXAMPLE.ORG ' }).error.code, 'ACCOUNT_EXISTS'); assert.equal(f.tables.USERS.length, 2);
 });
 
-test('members can register before the school list is populated without inventing school records', () => {
-  const f = fixture(); f.tables.SCHOOLS.length = 0; assert.equal(f.register([]).ok, true); assert.equal(f.tables.SCHOOLS.length, 0);
-  assert.equal(f.tables.USERS[1].AccountStatus, 'PENDING');
+test('registration requires a real school and basic teacher role instead of creating an unusable pending account', () => {
+  const f = fixture(); assert.equal(f.register([]).error.code, 'VALIDATION'); assert.equal(f.register([{role:'SUPERVISOR'}]).error.code, 'VALIDATION');
+  f.tables.SCHOOLS.length = 0; assert.equal(f.register().ok, false); assert.equal(f.tables.SCHOOLS.length, 0); assert.equal(f.tables.USERS.length, 1);
 });
 
 test('one account switches among approved school-scoped roles without combining their privileges', () => {
@@ -65,15 +68,49 @@ test('one account switches among approved school-scoped roles without combining 
   const foreign = f.tables.USER_ROLES.find(r=>r.UserID===f.admin.UserID); assert.equal(f.context.DETWIL_memberApi_('switchRole',{roleId:foreign.UserRoleID},token).error.code,'FORBIDDEN');
 });
 
-test('school and district roles stay pending until a super admin approves each grant', () => {
+test('district roles stay pending independently of immediate teacher access', () => {
   const f = fixture(); f.register([{role:'TEACHER',schoolId:'s1'},{role:'SUPERVISOR',schoolId:'s2'}]); const user=f.tables.USERS[1]; const token=f.login(user).data.token;
   const grants=f.tables.USER_ROLES.filter(r=>r.UserID===user.UserID);
   assert.equal(f.context.DETWIL_memberApi_('roleDecision',{roleId:grants[0].UserRoleID,decision:'APPROVE'},token).error.code,'FORBIDDEN');
-  assert.equal(f.context.DETWIL_memberApi_('roleDecision',{roleId:grants[0].UserRoleID,decision:'APPROVE'},f.adminToken).ok,true);
-  assert.equal(f.tables.USERS[1].AccountStatus,'ACTIVE'); assert.equal(f.tables.USER_ROLES.find(r=>r.UserRoleID===grants[1].UserRoleID).Status,'PENDING');
+  assert.equal(f.tables.USERS[1].AccountStatus,'ACTIVE'); assert.equal(grants[0].Status,'ACTIVE'); assert.equal(grants[1].Status,'PENDING');
   assert.equal(grants[1].ScopeType,'GLOBAL'); assert.equal(grants[1].ScopeID,'DETWIL');
   assert.equal(f.context.DETWIL_memberApi_('switchRole',{roleId:grants[1].UserRoleID},token).ok,false);
+  assert.equal(f.context.DETWIL_memberApi_('roleDecision',{roleId:grants[1].UserRoleID,decision:'APPROVE'},f.adminToken).ok,true);
+  assert.equal(f.context.DETWIL_memberApi_('switchRole',{roleId:grants[1].UserRoleID},token).ok,true);
   assert.ok(f.tables.AUDIT_LOG.some(r=>r.Action==='ROLE_APPROVE'));
+});
+
+test('migration enables existing self-registered pending teachers only and is idempotent', () => {
+  const f = fixture(); f.register([{role:'TEACHER',schoolId:'s1'},{role:'SCHOOL_ADMIN',schoolId:'s1'}]);
+  const user = f.tables.USERS[1]; user.AccountStatus='PENDING'; user.PrimaryRole='PUBLIC_VISITOR'; user.SchoolID='';
+  const teacher = f.tables.USER_ROLES.find(r=>r.UserID===user.UserID && r.RoleCode==='TEACHER'); teacher.Status='PENDING';
+  const token=f.login(user).data.token; const credentials=JSON.stringify(f.tables.AUTH_CREDENTIALS);
+  const result=f.context.DETWIL_migrateOpenMembership_(f.admin);
+  assert.equal(result.accountsActivated,1); assert.equal(result.teacherRolesActivated,1);
+  assert.equal(f.context.DETWIL_workApi_('myWorks',{},token).ok,true);
+  assert.equal(f.tables.USER_ROLES.find(r=>r.UserID===user.UserID && r.RoleCode==='SCHOOL_ADMIN').Status,'PENDING');
+  assert.equal(JSON.stringify(f.tables.AUTH_CREDENTIALS),credentials);
+  assert.equal(f.context.DETWIL_migrateOpenMembership_(f.admin).accountsActivated,0);
+  assert.equal(f.context.DETWIL_migrateOpenMembership_(f.admin).teacherRolesActivated,0);
+});
+
+test('migration and self-service requests cannot resurrect revoked roles or disabled accounts', () => {
+  const f=fixture(); f.register(); const user=f.tables.USERS[1];
+  const grant=f.tables.USER_ROLES.find(r=>r.UserID===user.UserID); grant.Status='REVOKED';
+  const token=f.login(user).data.token;
+  assert.equal(f.context.DETWIL_memberApi_('requestRoles',{roles:[{role:'TEACHER',schoolId:'s1'}]},token).error.code,'FORBIDDEN');
+  f.tables.USERS[1].AccountStatus='DISABLED'; grant.Status='PENDING';
+  assert.equal(f.context.DETWIL_migrateOpenMembership_(f.admin).accountsActivated,0);
+  assert.equal(f.tables.USER_ROLES.find(r=>r.UserRoleID===grant.UserRoleID).Status,'PENDING');
+  assert.equal(f.tables.USERS[1].AccountStatus,'DISABLED');
+});
+
+test('teacher role requests activate immediately while reviewer requests remain pending', () => {
+  const f=fixture(); const user=f.account('teacher','TEACHER','s1'); const token=f.login(user).data.token;
+  assert.equal(f.context.DETWIL_memberApi_('requestRoles',{roles:[{role:'TEACHER',schoolId:'s2'},{role:'SCHOOL_ADMIN',schoolId:'s2'}]},token).ok,true);
+  const added=f.tables.USER_ROLES.filter(r=>r.UserID===user.UserID && r.ScopeID==='s2');
+  assert.equal(added.find(r=>r.RoleCode==='TEACHER').Status,'ACTIVE'); assert.equal(added.find(r=>r.RoleCode==='SCHOOL_ADMIN').Status,'PENDING');
+  assert.equal(f.context.DETWIL_registrationOptions_().approvalRequired,false);
 });
 
 test('revocation and expiration take effect on existing sessions; PrimaryRole cannot resurrect removed privileges', () => {

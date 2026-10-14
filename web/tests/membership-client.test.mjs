@@ -11,6 +11,14 @@ test('duplicate-account response keeps its code for the existing-account sign-in
   } finally { globalThis.fetch = original; }
 });
 
+test('login no longer links to Apps Script and the publish button is gated by district approval', () => {
+  const studio = readFileSync(new URL('../components/Studio.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(studio, /Apps Script สำหรับผู้ดูแล|script\.google\.com/);
+  assert.match(studio, /selected.approvalStatus !== "DISTRICT_APPROVED"/);
+  const registration=readFileSync(new URL('../components/Membership.tsx', import.meta.url), 'utf8');
+  assert.match(registration,/สมาชิกใช้งานได้ทันที/); assert.doesNotMatch(registration,/บัญชีและคำขอบทบาทรอผู้ดูแลยืนยัน/);
+});
+
 test('registration never disables school-role checkboxes solely because the school list is empty', () => {
   const source = readFileSync(new URL('../components/Membership.tsx', import.meta.url), 'utf8');
   const picker = source.slice(source.indexOf('function RolePicker('), source.indexOf('export function Registration('));

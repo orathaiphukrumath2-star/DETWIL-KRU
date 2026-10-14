@@ -35,19 +35,21 @@ function fixture() {
   const content = { title: 'Teaching bundle', subject: 'Math', gradeLevel: 'M1', academicYear: '2569', workType: 'lesson', description: 'Learning activity', objectives: '', results: '', schoolId: 's1', attachments: [{ id: 'plan', category: 'PLAN', title: 'Lesson plan', url: 'https://example.org/plan.pdf', isPublic: true }, { id: 'media', category: 'MEDIA', title: 'Teaching media', url: 'https://example.org/media', isPublic: true }, { id: 'student', category: 'STUDENT', title: 'Private student evidence', url: 'https://example.org/private', isPublic: false }] };
   const save = (changes = {}, existing = null) => context.DETWIL_saveWork_({ id: existing?.id, versionId: existing?.versionId, content: { ...content, ...changes } }, teacher);
   const flow = (work, command, user = teacher, comment = '') => context.DETWIL_workflow_({ id: work.id, versionId: work.versionId, command, comment }, user);
-  return { context, tables, teacher, reviewer, district, content, save, flow };
+  const approve = work => flow(flow(flow(flow(work, 'SUBMIT_SCHOOL'), 'APPROVE', reviewer), 'SUBMIT_DISTRICT'), 'APPROVE', district);
+  return { context, tables, teacher, reviewer, district, content, save, flow, approve };
 }
 
 test('draft is durable but not publicly readable; publication excludes private evidence', () => {
   const f = fixture(); const work = f.save();
   assert.equal(f.tables.RECORD_VERSIONS.length, 1);
   assert.throws(() => f.context.DETWIL_publicProjection_(f.tables.WORKS[0]), /ไม่พบผลงาน/);
-  f.flow(work, 'PUBLISH');
+  assert.throws(() => f.flow(work, 'PUBLISH'), /โรงเรียนและเขต/);
+  f.flow(f.approve(work), 'PUBLISH');
   const result = f.context.DETWIL_publicProjection_(f.tables.WORKS[0]);
   assert.equal(result.content.attachments.length, 2);
   assert.equal(JSON.stringify(result).includes('Private student evidence'), false);
   assert.equal(JSON.stringify(f.tables.WORKS[0].PublishedJson).includes('/private'), false);
-  assert.equal(result.approvalStatus, 'UNREVIEWED');
+  assert.equal(result.approvalStatus, 'DISTRICT_APPROVED');
 });
 
 test('school then district approval is enforced, cannot self-review or cross schools', () => {
@@ -65,14 +67,15 @@ test('school then district approval is enforced, cannot self-review or cross sch
 });
 
 test('editing an approved work resets review, preserves published approved snapshot until republish', () => {
-  const f = fixture(); let w = f.save(); w = f.flow(w, 'PUBLISH'); w = f.flow(w, 'SUBMIT_SCHOOL'); w = f.flow(w, 'APPROVE', f.reviewer); w = f.flow(w, 'SUBMIT_DISTRICT'); w = f.flow(w, 'APPROVE', f.district);
+  const f = fixture(); let w = f.flow(f.approve(f.save()), 'PUBLISH');
   const oldVersion = w.versionId;
   w = f.save({ title: 'Revised title' }, w);
   assert.equal(w.approvalStatus, 'DRAFT');
   let published = f.context.DETWIL_publicProjection_(f.tables.WORKS[0]);
   assert.equal(published.versionId, oldVersion); assert.equal(published.content.title, 'Teaching bundle'); assert.equal(published.approvalStatus, 'DISTRICT_APPROVED');
-  w = f.flow(w, 'PUBLISH'); published = f.context.DETWIL_publicProjection_(f.tables.WORKS[0]);
-  assert.equal(published.content.title, 'Revised title'); assert.equal(published.approvalStatus, 'UNREVIEWED');
+  assert.throws(() => f.flow(w, 'PUBLISH'), /โรงเรียนและเขต/);
+  w = f.flow(f.approve(w), 'PUBLISH'); published = f.context.DETWIL_publicProjection_(f.tables.WORKS[0]);
+  assert.equal(published.content.title, 'Revised title'); assert.equal(published.approvalStatus, 'DISTRICT_APPROVED');
 });
 
 test('pending works cannot change, stale versions conflict and returns need feedback', () => {
@@ -95,7 +98,7 @@ test('file references and school ownership cannot be forged', () => {
 test('publication requires shareable plans and media; unpublish removes access', () => {
   const f = fixture(); let w = f.save({ attachments: [] });
   assert.throws(() => f.flow(w, 'PUBLISH'), /แผนการสอนและสื่อ/);
-  w = f.save({}, w); w = f.flow(w, 'PUBLISH'); f.flow(w, 'UNPUBLISH');
+  w = f.save({}, w); w = f.flow(f.approve(w), 'PUBLISH'); f.flow(w, 'UNPUBLISH');
   assert.throws(() => f.context.DETWIL_publicProjection_(f.tables.WORKS[0]), /ไม่พบผลงาน/);
 });
 
@@ -115,9 +118,38 @@ test('opaque sessions are hashed, expire, and are checked against current accoun
 });
 
 test('public file download cannot expose private evidence or foreign file IDs', () => {
-  const f = fixture(); let w = f.save(); f.flow(w, 'PUBLISH');
+  const f = fixture(); let w = f.save(); f.flow(f.approve(w), 'PUBLISH');
   assert.throws(() => f.context.DETWIL_downloadFile_({ id: w.id, fileId: 'foreign' }, ''), /ไม่พบไฟล์/);
   assert.throws(() => f.context.DETWIL_downloadFile_({ id: w.id, fileId: 'foreign', preview: true }, ''), /เข้าสู่ระบบ/);
+});
+
+test('publication is blocked at draft, school-pending, school-approved and district-pending stages', () => {
+  const f=fixture(); let w=f.save();
+  assert.throws(()=>f.flow(w,'PUBLISH'),/โรงเรียนและเขต/);
+  w=f.flow(w,'SUBMIT_SCHOOL'); assert.throws(()=>f.flow(w,'PUBLISH'),/โรงเรียนและเขต/);
+  w=f.flow(w,'APPROVE',f.reviewer); assert.throws(()=>f.flow(w,'PUBLISH'),/โรงเรียนและเขต/);
+  w=f.flow(w,'SUBMIT_DISTRICT'); assert.throws(()=>f.flow(w,'PUBLISH'),/โรงเรียนและเขต/);
+  w=f.flow(w,'APPROVE',f.district); assert.equal(f.flow(w,'PUBLISH').isPublic,true);
+});
+
+test('legacy unreviewed public snapshots are hidden from listing, direct page and file routes', () => {
+  const f=fixture(); const w=f.save(); const row=f.tables.WORKS[0];
+  row.IsPublic='TRUE'; row.PublishedVersionID=w.versionId; row.PublishedJson=row.ContentJson;
+  assert.equal(f.context.DETWIL_workApi_('publicWorks',{}).data.total,0);
+  assert.equal(f.context.DETWIL_workApi_('publicWork',{id:w.id}).error.code,'NOT_FOUND');
+  assert.equal(f.context.DETWIL_workApi_('downloadFile',{id:w.id,fileId:'anything'}).error.code,'NOT_FOUND');
+  const report=f.context.DETWIL_migrateOpenMembership_({UserID:'owner',PrimaryRole:'SUPER_ADMIN'});
+  assert.equal(report.unapprovedWorksUnpublished,1); assert.equal(f.tables.WORKS[0].IsPublic,'FALSE');
+  assert.equal(f.tables.WORKS[0].ContentJson,row.ContentJson);
+});
+
+test('approval must belong to the same work and version and include both school and district', () => {
+  const f=fixture(); const w=f.save(); const row=f.tables.WORKS[0]; row.ApprovalStatus='DISTRICT_APPROVED';
+  assert.throws(()=>f.flow(w,'PUBLISH'),/โรงเรียนและเขต/);
+  f.tables.WORKFLOW_LOG.push({RecordType:'WORK',RecordID:w.id,VersionID:w.versionId,Action:'APPROVE',FromApprovalStatus:'DISTRICT_PENDING',ToApprovalStatus:'DISTRICT_APPROVED'});
+  assert.throws(()=>f.flow(w,'PUBLISH'),/โรงเรียนและเขต/);
+  f.tables.WORKFLOW_LOG.push({RecordType:'WORK',RecordID:'other-work',VersionID:w.versionId,Action:'APPROVE',FromApprovalStatus:'SCHOOL_PENDING',ToApprovalStatus:'SCHOOL_APPROVED'});
+  assert.throws(()=>f.flow(w,'PUBLISH'),/โรงเรียนและเขต/);
 });
 
 test('anonymous API mutations, forged role payloads and owner bootstrap are rejected', () => {

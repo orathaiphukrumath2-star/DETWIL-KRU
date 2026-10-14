@@ -444,14 +444,6 @@ export function Studio() {
                 สมัครสมาชิก
               </Link>
               <span className="muted">ลืมรหัสผ่าน: ติดต่อผู้ดูแลระบบ</span>
-              <a
-                className="text-link"
-                href="https://script.google.com/u/0/home/projects/1bdeBVjaQoTJ7sqkRI_7xxfmRbfQYaOw33066v1gtc5oaIG-RYKcMTmWP/edit"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Apps Script สำหรับผู้ดูแล
-              </a>
             </form>
           </div>
         ) : user.mustChangePassword ? (
@@ -523,7 +515,8 @@ export function Studio() {
             </div>
             <div className="studio-notice">
               <ShieldCheck size={18} />
-              รอผู้ดูแลอนุมัติบทบาท หรือเลือกบทบาทที่อนุมัติแล้วก่อนจัดทำผลงาน
+              เลือกบทบาทครูและสถานศึกษาเพื่อเริ่มจัดทำผลงาน
+              สิทธิ์ผู้ตรวจรอยืนยันแยกต่างหาก
             </div>
             <MemberProfile
               user={user}
@@ -1185,7 +1178,16 @@ export function Studio() {
                           <>
                             <button
                               className="secondary-button"
-                              disabled={busy || dirty}
+                              disabled={
+                                busy ||
+                                dirty ||
+                                selected.approvalStatus !== "DISTRICT_APPROVED"
+                              }
+                              title={
+                                selected.approvalStatus === "DISTRICT_APPROVED"
+                                  ? "เผยแพร่รุ่นที่โรงเรียนและเขตรับรองแล้ว"
+                                  : "ต้องผ่านโรงเรียนและเขตก่อนเผยแพร่"
+                              }
                               onClick={() => void command("PUBLISH")}
                             >
                               <Globe2 size={17} />
@@ -1193,6 +1195,12 @@ export function Studio() {
                                 ? "อัปเดตหน้าเผยแพร่"
                                 : "เผยแพร่หน้าเว็บไซต์"}
                             </button>
+                            {selected.approvalStatus !==
+                              "DISTRICT_APPROVED" && (
+                              <p className="muted">
+                                รอรับรองจากโรงเรียนและเขตก่อนเผยแพร่สาธารณะ
+                              </p>
+                            )}
                             {selected.isPublic && (
                               <>
                                 <a

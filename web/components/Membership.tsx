@@ -41,12 +41,16 @@ function RolePicker({
   schools,
   onChange,
   loading = false,
+  defaultTeacher = false,
 }: {
   schools: School[];
   onChange: (requests: RoleRequest[]) => void;
   loading?: boolean;
+  defaultTeacher?: boolean;
 }) {
-  const [chosen, setChosen] = useState<string[]>([]);
+  const [chosen, setChosen] = useState<string[]>(
+    defaultTeacher ? ["TEACHER"] : [],
+  );
   const [schoolId, setSchoolId] = useState("");
   function update(next: string[], school: string) {
     setChosen(next);
@@ -107,7 +111,9 @@ function RolePicker({
 
 export function Registration() {
   const [options, setOptions] = useState<Options>({ schools: [], roles: [] });
-  const [requests, setRequests] = useState<RoleRequest[]>([]);
+  const [requests, setRequests] = useState<RoleRequest[]>([
+    { role: "TEACHER", schoolId: "" },
+  ]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [optionsError, setOptionsError] = useState("");
@@ -171,9 +177,6 @@ export function Registration() {
                 <Link className="text-link" href="/studio">
                   เข้าสู่ระบบบัญชีเดิม
                 </Link>
-                {
-                  " · หากผู้ดูแลยังไม่ได้ตั้งรหัสผ่าน ให้เปิด Apps Script แล้วเรียกใช้ DETWIL_prepareWorkSystem"
-                }
               </p>
             )}
           </div>
@@ -195,7 +198,7 @@ export function Registration() {
             <CheckCheck size={38} />
             <h2>สมัครสมาชิกแล้ว</h2>
             <p>
-              บัญชีและคำขอบทบาทรอผู้ดูแลยืนยัน เข้าสู่ระบบเพื่อติดตามสถานะได้
+              บัญชีพร้อมใช้งานแล้ว เข้าสู่ระบบเพื่อเริ่มจัดทำและส่งผลงานได้ทันที
             </p>
             <Link className="primary-button" href="/studio">
               <KeyRound size={17} />
@@ -211,6 +214,10 @@ export function Registration() {
               const data = new FormData(form);
               setError("");
               setAccountExists(false);
+              if (!requests.some((request) => request.role === "TEACHER")) {
+                setError("กรุณาเลือกบทบาทครู / ผู้จัดทำผลงานและสถานศึกษา");
+                return;
+              }
               if (
                 requests.some(
                   (request) => needsSchool(request.role) && !request.schoolId,
@@ -302,11 +309,12 @@ export function Registration() {
                 schools={options.schools}
                 onChange={setRequests}
                 loading={loading}
+                defaultTeacher
               />
               <div className="registration-footer">
                 <span className="approval-badge">
                   <ShieldCheck size={15} />
-                  รอผู้ดูแลอนุมัติสิทธิ์
+                  สมาชิกใช้งานได้ทันที
                 </span>
                 <button
                   className="primary-button"
@@ -316,6 +324,7 @@ export function Registration() {
                   {busy ? "กำลังสมัคร" : loading ? "กำลังโหลด" : "สมัครสมาชิก"}
                 </button>
               </div>
+              <p className="muted">สิทธิ์ผู้ตรวจและผู้ดูแลรอยืนยันแยกต่างหาก</p>
             </fieldset>
           </form>
         )}

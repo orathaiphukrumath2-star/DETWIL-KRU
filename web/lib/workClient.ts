@@ -15,7 +15,7 @@ export async function memberApi<T>(
     );
   return result.data as T;
 }
-export const membershipOptionsUrl = "/api/membership?v=school-roles-1";
+export const membershipOptionsUrl = "/api/membership?v=open-membership-1";
 
 export class MemberApiError extends Error {
   code: string;

@@ -186,18 +186,28 @@ function DETWIL_cleanContent_(input, user, work) {
   return content;
 }
 
+function DETWIL_approvalIndex_(reviews) {
+  var index = {};
+  reviews.forEach(function(row) {
+    if (row.RecordType !== 'WORK') return;
+    var key = row.RecordID + ':' + row.VersionID;
+    if (row.Action === 'RETURN' || row.Action === 'REJECT') index[key] = row.ToApprovalStatus;
+    if (row.Action === 'APPROVE' && row.FromApprovalStatus === 'SCHOOL_PENDING' && row.ToApprovalStatus === 'SCHOOL_APPROVED') index[key] = 'SCHOOL_APPROVED';
+    if (row.Action === 'APPROVE' && row.FromApprovalStatus === 'DISTRICT_PENDING' && row.ToApprovalStatus === 'DISTRICT_APPROVED' && index[key] === 'SCHOOL_APPROVED') index[key] = 'DISTRICT_APPROVED';
+  });
+  return index;
+}
+
 function DETWIL_reviewStatus_(work, versionId) {
-  var reviews = DETWIL_readAll('WORKFLOW_LOG').filter(function(row) { return row.RecordType === 'WORK' && row.RecordID === work.WorkID && row.VersionID === versionId; });
-  var status = 'UNREVIEWED';
-  reviews.forEach(function(row) { if (row.Action === 'APPROVE') status = row.ToApprovalStatus; });
-  return status;
+  return DETWIL_approvalIndex_(DETWIL_readAll('WORKFLOW_LOG'))[work.WorkID + ':' + versionId] || 'UNREVIEWED';
 }
 
 function DETWIL_publicProjection_(work) {
   if (!DETWIL_bool(work.IsPublic) || !work.PublishedVersionID || !work.PublishedJson) DETWIL_workError_('NOT_FOUND', 'ไม่พบผลงานหรือยังไม่ได้เผยแพร่');
+  if (DETWIL_reviewStatus_(work, work.PublishedVersionID) !== 'DISTRICT_APPROVED') DETWIL_workError_('NOT_FOUND', 'ผลงานรุ่นนี้ยังไม่ผ่านการตรวจโรงเรียนและเขต');
   var content = JSON.parse(work.PublishedJson);
   content.attachments = content.attachments.filter(function(item) { return item.isPublic === true; });
-  return { id: work.WorkID, content: content, versionId: work.PublishedVersionID, approvalStatus: DETWIL_reviewStatus_(work, work.PublishedVersionID), isPublic: true };
+  return { id: work.WorkID, content: content, versionId: work.PublishedVersionID, approvalStatus: 'DISTRICT_APPROVED', isPublic: true };
 }
 
 function DETWIL_privateProjection_(work) {
@@ -239,6 +249,7 @@ function DETWIL_workflow_(payload, user) {
     if (!content.attachments.some(function(a) { return a.category === 'PLAN'; }) || !content.attachments.some(function(a) { return a.category === 'MEDIA'; })) DETWIL_workError_('VALIDATION', 'กรุณาแนบแผนการสอนและสื่อที่ใช้สอนอย่างน้อยประเภทละ 1 รายการ');
   }
   if (action === 'PUBLISH') {
+    if (previous !== 'DISTRICT_APPROVED' || DETWIL_reviewStatus_(work, work.CurrentVersionID) !== 'DISTRICT_APPROVED') DETWIL_workError_('INVALID_STATE', 'ต้องผ่านการตรวจรับรองจากโรงเรียนและเขตในรุ่นนี้ก่อนเผยแพร่');
     if (!content.attachments.some(function(a) { return a.category === 'PLAN' && a.isPublic; }) || !content.attachments.some(function(a) { return a.category === 'MEDIA' && a.isPublic; })) DETWIL_workError_('VALIDATION', 'กรุณาอนุญาตเผยแพร่แผนการสอนและสื่ออย่างน้อยประเภทละ 1 รายการ');
     var publicContent = JSON.parse(work.ContentJson);
     publicContent.attachments = publicContent.attachments.filter(function(a) { return a.isPublic; });
@@ -308,10 +319,9 @@ function DETWIL_workApi_(action, payload, token) {
       return DETWIL_jsonSuccess(DETWIL_activateOwner_(payload.password, payload.displayName, payload.activationToken));
     }
     if (action === 'publicWorks') {
-      var works = DETWIL_readAll('WORKS').filter(function(w) { return !DETWIL_bool(w.IsDeleted) && DETWIL_bool(w.IsPublic) && w.PublishedJson; });
-      var approvals = {};
-      DETWIL_readAll('WORKFLOW_LOG').forEach(function(r) { if (r.RecordType === 'WORK' && r.Action === 'APPROVE') approvals[r.VersionID] = r.ToApprovalStatus; });
-      var summaries = works.map(function(w) { var c = JSON.parse(w.PublishedJson); return { id: w.WorkID, title: c.title, authorName: c.authorName, schoolName: c.schoolName, subject: c.subject, gradeLevel: c.gradeLevel, academicYear: c.academicYear, workType: c.workType, approvalStatus: approvals[w.PublishedVersionID] || 'UNREVIEWED' }; });
+      var approvals = DETWIL_approvalIndex_(DETWIL_readAll('WORKFLOW_LOG'));
+      var works = DETWIL_readAll('WORKS').filter(function(w) { return !DETWIL_bool(w.IsDeleted) && DETWIL_bool(w.IsPublic) && w.PublishedJson && approvals[w.WorkID + ':' + w.PublishedVersionID] === 'DISTRICT_APPROVED'; });
+      var summaries = works.map(function(w) { var c = JSON.parse(w.PublishedJson); return { id: w.WorkID, title: c.title, authorName: c.authorName, schoolName: c.schoolName, subject: c.subject, gradeLevel: c.gradeLevel, academicYear: c.academicYear, workType: c.workType, approvalStatus: 'DISTRICT_APPROVED' }; });
       var query = String(payload.search || '').toLowerCase().slice(0, 200);
       summaries = summaries.filter(function(w) { return (!payload.year || payload.year === 'all' || w.academicYear === payload.year) && (!payload.type || payload.type === 'all' || w.workType === payload.type) && (!query || [w.title, w.authorName, w.schoolName].join(' ').toLowerCase().indexOf(query) >= 0); });
       var page = Math.max(1, Math.min(10000, Math.floor(Number(payload.page) || 1)));
