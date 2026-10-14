@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "DETWIL",
-  description: "Digital Ecosystem for Teacher Works and Learning Innovation",
+  title: "DETWIL | ผลงานครูและนวัตกรรมการเรียนรู้ สพม.หนองคาย",
+  description: "ระบบนิเวศดิจิทัลเพื่อพัฒนาผลงานครูและนวัตกรรมการเรียนรู้ สำนักงานเขตพื้นที่การศึกษามัธยมศึกษาหนองคาย",
 };
 
 export default function RootLayout({
