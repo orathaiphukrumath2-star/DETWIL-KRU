@@ -125,6 +125,10 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .distribution-bars i.tone-amber { background: #c39442; }
 .distribution-bars i.tone-rose { background: #bc6880; }
 @media(max-width: 760px) {
+  .topbar { gap: 6px; }
+  .topbar-leading { flex: 0 0 auto; }
+  .topbar-title { display: none; }
+  .topbar .primary-button { white-space: nowrap; flex-shrink: 0; font-size: 12px; padding: 8px; }
   .studio-topbar { padding: 14px 18px; gap: 12px; flex-wrap: wrap; }
   .studio-brand { font-size: 23px; gap: 10px; }
   .studio-brand span { font-size: 11px; padding-left: 10px; }
