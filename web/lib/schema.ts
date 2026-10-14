@@ -1,4 +1,6 @@
 export const sheetSchemas = {
+  WORKS: ["WorkID", "OwnerUserID", "SchoolID", "AuthorName", "SchoolName", "Title", "Subject", "GradeLevel", "AcademicYear", "WorkType", "ContentJson", "CurrentVersionID", "VersionNo", "ApprovalStatus", "IsPublic", "PublishedVersionID", "PublishedJson", "CreatedAt", "UpdatedAt", "IsDeleted"],
+  AUTH_SESSIONS: ["SessionID", "TokenHash", "UserID", "ExpiresAt", "CreatedAt", "IsDeleted"],
   SETTINGS: ["SettingKey", "SettingValue", "ValueType", "Description", "IsSecret", "UpdatedAt", "UpdatedBy"],
   USERS: ["UserID", "Email", "DisplayName", "SchoolID", "PrimaryRole", "AccountStatus", "CanLogin", "AuthMode", "PasswordLoginEnabled", "LastLoginAt", "LoginCount", "StartDate", "EndDate", "CreatedAt", "CreatedBy", "UpdatedAt", "UpdatedBy", "IsDeleted", "DeletedAt", "DeletedBy"],
   USER_ROLES: ["UserRoleID", "UserID", "RoleCode", "ScopeType", "ScopeID", "StartDate", "EndDate", "Status", "CreatedAt", "CreatedBy", "UpdatedAt", "UpdatedBy", "IsDeleted"],

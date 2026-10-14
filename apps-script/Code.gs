@@ -26,7 +26,9 @@ function doPost(e) {
     } else if (action === 'health') {
       result = DETWIL_healthCheck();
     } else if (action === 'passwordLogin') {
-      result = DETWIL_verifyPasswordLogin(payload.email, payload.password);
+      result = DETWIL_workApi_(action, payload, body.token);
+    } else if (DETWIL_WORK_ACTIONS.indexOf(action) !== -1) {
+      result = DETWIL_workApi_(action, payload, body.token);
     } else {
       result = DETWIL_jsonError('UNKNOWN_ACTION', 'ไม่พบคำสั่งที่ร้องขอ', { action: action });
     }
