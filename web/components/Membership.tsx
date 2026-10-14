@@ -40,9 +40,11 @@ function needsSchool(role: string) {
 function RolePicker({
   schools,
   onChange,
+  loading = false,
 }: {
   schools: School[];
   onChange: (requests: RoleRequest[]) => void;
+  loading?: boolean;
 }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const [schoolId, setSchoolId] = useState("");
@@ -94,7 +96,9 @@ function RolePicker({
       )}
       {!schools.length && (
         <p className="muted">
-          ยังไม่มีรายชื่อโรงเรียนที่เปิดใช้งาน กรุณาติดต่อผู้ดูแลเพิ่มสถานศึกษา
+          {loading
+            ? "กำลังโหลดรายชื่อสถานศึกษา"
+            : "ยังไม่มีรายชื่อโรงเรียนที่เปิดใช้งาน กรุณาติดต่อผู้ดูแลเพิ่มสถานศึกษา"}
         </p>
       )}
     </div>
@@ -294,7 +298,11 @@ export function Registration() {
                   <input name="website" tabIndex={-1} autoComplete="off" />
                 </label>
               </div>
-              <RolePicker schools={options.schools} onChange={setRequests} />
+              <RolePicker
+                schools={options.schools}
+                onChange={setRequests}
+                loading={loading}
+              />
               <div className="registration-footer">
                 <span className="approval-badge">
                   <ShieldCheck size={15} />
