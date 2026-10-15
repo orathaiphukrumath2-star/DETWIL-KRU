@@ -27,3 +27,40 @@ test('registration never disables school-role checkboxes solely because the scho
   assert.match(picker, /checked=\{chosen.includes\(role\)\}/);
   assert.match(picker, /required/);
 });
+
+test('member requests have a deadline and never automatically repeat mutations', async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (_input, init) => {
+    calls++;
+    assert.ok(init.signal instanceof AbortSignal);
+    assert.equal(init.credentials, 'same-origin');
+    assert.equal(init.cache, 'no-store');
+    throw new DOMException('deadline', 'TimeoutError');
+  };
+  try {
+    await assert.rejects(memberApi('saveWork'), error => error instanceof MemberApiError && error.code === 'TIMEOUT');
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = original; }
+});
+
+test('network failures and non-JSON server responses are understandable errors', async () => {
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+    await assert.rejects(memberApi('session'), error => error.code === 'NETWORK');
+    globalThis.fetch = async () => new Response('<html>Gateway timeout</html>', { status: 504 });
+    await assert.rejects(memberApi('passwordLogin'), error => error.code === 'UNAVAILABLE' && !error.message.includes('JSON'));
+  } finally { globalThis.fetch = original; }
+});
+
+test('session outages are not silently interpreted as a signed-out user; recovery routes are linked', () => {
+  const source = readFileSync(new URL('../components/Studio.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /\.catch\(\(\) => \{\}\)/);
+  assert.match(source, /error.code === "UNAUTHORIZED"/);
+  assert.match(source, /sessionUnavailable/);
+  assert.match(source, /href="\/forgot-password"/);
+  const recovery = readFileSync(new URL('../components/PasswordRecovery.tsx', import.meta.url), 'utf8');
+  assert.match(recovery, /identityVerified: true/);
+  assert.doesNotMatch(recovery, /localStorage|sessionStorage|setInterval/);
+});

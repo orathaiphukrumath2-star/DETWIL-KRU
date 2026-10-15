@@ -1,75 +1,78 @@
 # DETWIL-KRU
 
-DETWIL: ระบบนิเวศดิจิทัลเพื่อพัฒนาผลงานครูและนวัตกรรมการเรียนรู้
+DETWIL: ระบบนิเวศดิจิทัลเพื่อพัฒนาผลงานครูและนวัตกรรมการเรียนรู้ สพม.หนองคาย
 
-โครงนี้เริ่มจาก Phase 1 Foundation ตามแนวทาง Hybrid:
+เว็บใช้งาน: [detwil-kru.vercel.app](https://detwil-kru.vercel.app)
 
-- `apps-script/` สำหรับ Google Apps Script, Google Sheets, Google Drive, setup, repository, audit, error และ password hash
-- `web/` สำหรับ Vercel/Next.js frontend
-- `docs/` สำหรับคู่มือและ handoff
+## สถานะระบบ
 
-## สถานะปัจจุบัน
+รุ่น 0.5.0 เพิ่มการกู้บัญชีแบบผู้ดูแลยืนยันตัวตน ไม่ส่ง OTP หรืออีเมลอัตโนมัติ
 
-โค้ดชุดนี้เป็น Phase 1 Foundation สำหรับนำขึ้น GitHub และ Vercel มี dashboard และ `/api/health` ที่ตรวจ Google Apps Script, Google Sheets, Google Drive และ schema
+- Next.js บน Vercel เป็นหน้าบ้านและ API ฝั่ง server
+- Apps Script เชื่อม Google Sheets และ Google Drive เดิม ไม่สร้างฐานข้อมูลใหม่ในการอัปเกรด
+- Schema 30 ตาราง รวม `PASSWORD_RESET_REQUESTS`; รายชื่อโรงเรียนจริง 31 แห่ง
+- สมัครสมาชิกครูแล้วใช้งานทันที; ผู้ตรวจโรงเรียนและผู้ดูแลเขตรอยืนยันสิทธิ์แยกต่างหาก
+- หนึ่งคนมีหลายบทบาท สลับใช้ทีละบทบาทตามขอบเขตโรงเรียน/เขต ไม่รวมสิทธิ์ทุกบทบาทเข้าด้วยกัน
+- สร้างชุดผลงาน แผนการสอน สื่อ ผลงานผู้เรียน และหลักฐาน แนบลิงก์ HTTPS หรือไฟล์ไม่เกิน 2 MB
+- ฉบับร่าง → ตรวจโรงเรียน → ตรวจเขต → เผยแพร่เป็นหน้าเว็บ 1 หน้า พร้อมประวัติการตรวจ
+- แก้ไขผลงานที่เผยแพร่แล้วต้องตรวจฉบับใหม่ซ้ำก่อนเผยแพร่; ฉบับสาธารณะเดิมยังอยู่
+- ไฟล์และหลักฐานส่วนตัวไม่เผยแพร่ตามค่าเริ่มต้น โดยเฉพาะหลักฐานผู้เรียน
+- เข้าระบบด้วย cookie ส่วนตัว; เปลี่ยน/กู้รหัสผ่านยกเลิก session เดิม
 
-ตรวจ Apps Script deployment ของเจ้าของระบบวันที่ 14 ตุลาคม 2569: Spreadsheet, Drive root และ schema ตอบกลับผ่าน การตรวจนี้ไม่ใช่การตรวจจำนวนหรือความครบถ้วนของข้อมูลในชีต
+## หน้าหลัก
 
-ระบบเข้าสู่ระบบบนเว็บ, ส่งผลงาน, รับรองผลงาน, เว็บไซต์ครู และ Canvas Document Engine ยังต้องพัฒนาต่อก่อนเปิดให้ครูใช้งานจริง
+| หน้า | URL |
+| --- | --- |
+| Dashboard สาธารณะ | `/` |
+| คลังผลงานที่อนุมัติแล้ว | `/#works` |
+| สมาชิก จัดทำผลงาน และคิวตรวจ | `/studio` |
+| สมัครสมาชิก | `/register` |
+| ขอรหัสใหม่ | `/forgot-password` |
+| ตั้งรหัสใหม่ด้วยลิงก์ส่วนตัว | `/reset-password` |
+| ตรวจการเชื่อมต่อ | `/api/health` |
 
-## เริ่มเว็บใน VSCode
+## เริ่มใน VSCode
 
-ใช้ Node.js 22 และเปิด Terminal ในโฟลเดอร์โปรเจกต์:
+ใช้ Node.js 22 เปิด Terminal ที่โฟลเดอร์โปรเจกต์:
 
 ```powershell
 cd web
 npm ci
-Copy-Item .env.local.example .env.local
 ```
 
-หากมี `.env.local` อยู่แล้ว ให้ใช้ไฟล์เดิมและข้ามคำสั่ง Copy-Item เติม `APPS_SCRIPT_WEB_APP_URL` เป็น URL ลงท้าย `/exec` แล้วรัน:
+หากยังไม่มี `.env.local` ให้สร้างจาก `.env.local.example` แล้วเติม `APPS_SCRIPT_WEB_APP_URL` เป็น URL เดิมที่ลงท้าย `/exec` หากมีอยู่แล้วให้ใช้ไฟล์เดิม
 
 ```powershell
 npm run dev
 ```
 
-เปิด `http://localhost:3000` ตรวจด้วย `npm test`, `npm run build` และ `npm run typecheck`
+เปิด `http://localhost:3000` ตรวจโค้ดด้วย `npm test`, `npm run build`, `npm run typecheck`
 
-## GitHub และ Vercel
+## อัปเดตระบบเดิม
 
-ดู [คู่มือขึ้นออนไลน์](docs/github-vercel-th.md) ตั้ง Root Directory ใน Vercel เป็น `web` และเพิ่ม `APPS_SCRIPT_WEB_APP_URL` ใน Environment Variables ของ Vercel ค่านี้ใช้ฝั่ง server เท่านั้น
+1. ทดสอบโค้ดในเครื่องและสำรอง Apps Script รุ่นที่ใช้อยู่
+2. อัปโหลดไฟล์ `.gs` และ manifest ไปโปรเจกต์ Apps Script เดิมด้วย clasp หรือ Editor
+3. การเพิ่มระบบกู้บัญชีครั้งแรก ให้เจ้าของ Google รัน `DETWIL_preparePasswordRecovery` ใน Editor ฟังก์ชันนี้ตรวจหัวตารางเดิมก่อนสร้างตารางใหม่และไม่เปลี่ยนรหัสสมาชิก
+4. สร้าง Apps Script version ใหม่ แล้วอัปเดต deployment เดิมเพื่อรักษา URL
+5. Push โค้ดเว็บที่ทดสอบแล้วไป GitHub สาขา `main`; Vercel ใช้ Root Directory `web`
+6. ตรวจ `/api/health` และหน้าที่แก้ไขหลัง deployment พร้อมใช้งาน
 
-`.env.local`, credentials, `node_modules` และ `.next` ถูกละเว้นจาก Git ต้องไม่เพิ่มด้วย `git add -f` การ push ไป GitHub ไม่ได้อัปเดต Google Apps Script โดยอัตโนมัติ
+**ห้ามรัน `DETWIL_setupNewProject` กับระบบเดิมเพื่ออัปเกรด** การ push GitHub ไม่ได้อัปเดต Apps Script อัตโนมัติ
 
-## สิ่งที่ทำแล้ว
+## บัญชีและรหัสผ่าน
 
-- สร้าง schema ของชีตหลักครบชุด
-- เพิ่ม `AUTH_CREDENTIALS` สำหรับ password hash/salt
-- เพิ่ม setup script สำหรับสร้าง spreadsheet, sheets, headers และ Drive folders
-- เพิ่ม repository layer สำหรับอ่าน/เขียนชีตแบบรวมศูนย์
-- เพิ่ม audit log, system error log และ backup พื้นฐาน
-- สร้างหน้า dashboard เริ่มต้นสำหรับ Vercel/Next.js
+สมาชิกใช้รหัสที่ตัวเองตั้งเข้าสู่ระบบ แต่ชีตเก็บ hash/salt แทนรหัสจริง ผู้ดูแลอ่านรหัสเดิมกลับไม่ได้ และไม่ควรขอให้สมาชิกส่งรหัสผ่านในแชต
 
-## วิธีเดินต่อแบบจับมือทำ
+เมื่อจำรหัสไม่ได้ สมาชิกส่งคำขอที่ `/forgot-password` ผู้ดูแลตรวจตัวตนผ่านช่องทางที่รู้จักก่อนออกลิงก์ส่วนตัว สมาชิกตั้งรหัสเองภายใน 15 นาที ลิงก์ใช้ซ้ำไม่ได้ และระบบยกเลิก session เดิมทั้งหมด ดู [คู่มือกู้บัญชี](docs/password-recovery-th.md)
 
-1. เปิดโฟลเดอร์ `apps-script`
-2. สร้างโปรเจกต์ Apps Script ใหม่
-3. คัดลอกไฟล์ `.gs` และ `appsscript.json` เข้า Apps Script
-4. Run ฟังก์ชัน `DETWIL_setupNewProject`
-5. อนุญาตสิทธิ์ Google Sheets และ Drive
-6. จด `spreadsheetId` และ `rootFolderId` ที่ระบบคืนกลับมา
-7. เติม `APPS_SCRIPT_WEB_APP_URL` ลงใน `.env.local` ของฝั่ง `web`
-8. เริ่มเชื่อม API จริงใน Phase 2
+`.env.local`, OAuth credentials, session tokens, reset links, `node_modules` และ `.next` ห้ามนำเข้า Git ดู [คู่มือขึ้นออนไลน์](docs/github-vercel-th.md) และ [คู่มือสมาชิก](docs/membership-th.md)
 
-## หมายเหตุด้านรหัสผ่าน
+## งานที่ยังไม่ครบ
 
-ระบบนี้ไม่เก็บรหัสผ่านจริงในชีต แต่เก็บเฉพาะ `PasswordHash`, `PasswordSalt` และ `PasswordAlgorithm` ในชีต `AUTH_CREDENTIALS`
+- หน้าเว็บไซต์ครูแบบรวมผลงานหลายชุดและปรับธีมได้
+- รายงานและ dashboard เชิงลึกระดับโรงเรียน/เขต พร้อม export
+- Canvas Document Engine และเกียรติบัตร: ยังต้องกำหนดแม่แบบ เลขที่เอกสาร และผู้ลงนามจริง
+- ทดสอบโหลดพร้อมกันก่อนรับรองเป้าหมาย 1,000 สมาชิก / 4,000 ผลงานต่อปี
+- Distributed rate limiting, สแกนไฟล์อัปโหลด และงานล้าง session/คำขอหมดอายุ
 
-## ข้อมูลที่ยังต้องเติม
-
-- อีเมล Super Admin
-- รายชื่อและรหัส 31 โรงเรียน
-- Google OAuth Client ID
-- Apps Script Web App URL
-- รูปแบบเลขที่เกียรติบัตร/เอกสารรับรอง
-- ผู้ลงนาม ลายเซ็น และตราประทับ
-- ขนาดไฟล์และชนิดไฟล์ที่อนุญาต
+การไม่ส่งอีเมลช่วยลดโควต้าส่วนนั้น แต่ Sheets/Drive/Apps Script ยังมีโควต้าและข้อจำกัด ไม่มีการรับรองความเร็วหรือจำนวนผู้ใช้พร้อมกันจากจำนวนรายการเพียงอย่างเดียว

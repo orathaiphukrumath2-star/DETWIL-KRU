@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { RecoveryAdmin } from "@/components/PasswordRecovery";
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -451,6 +452,9 @@ export function MemberProfile({
       )}
       <section className="editor-section">
         <h2>เปลี่ยนรหัสผ่าน</h2>
+        <Link className="text-link" href="/forgot-password">
+          จำรหัสผ่านเดิมไม่ได้
+        </Link>
         <form
           className="admin-form"
           onSubmit={(event) => {
@@ -535,6 +539,7 @@ export function MemberAdmin({
   );
   return (
     <div className="member-admin">
+      <RecoveryAdmin />
       <section className="editor-section">
         <h2>
           คำขอบทบาท <span className="approval-badge">{pending.length}</span>

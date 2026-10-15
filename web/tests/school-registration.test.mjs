@@ -31,6 +31,7 @@ function fixture() {
   });
   vm.runInContext(readFileSync(new URL('../../apps-script/Config.gs', import.meta.url), 'utf8'), context);
   vm.runInContext(readFileSync(new URL('../../apps-script/SchoolRegistration.gs', import.meta.url), 'utf8'), context);
+  vm.runInContext(readFileSync(new URL('../../apps-script/RecoveryService.gs', import.meta.url), 'utf8'), context);
   const schema = context.DETWIL.SHEET_SCHEMAS;
   Object.entries(schema).forEach(([name, headers]) => makeSheet(name, [Array.from(headers)]));
   context.DETWIL_ensureSheet = name => { const sheet = sheets.get(name) || makeSheet(name); sheet.rows[0] = Array.from(schema[name]); return sheet; };
@@ -46,7 +47,7 @@ test('editor setup repairs missing tables and seeds 31 schools once without gran
   const users = structuredClone(f.sheets.get('USERS').rows);
   const roles = structuredClone(f.sheets.get('USER_ROLES').rows);
   const report = f.context.DETWIL_prepareSchoolRegistration();
-  assert.equal(report.tableCount, 29); assert.equal(report.addedSchools, 31); assert.equal(report.activeSchools, 31);
+  assert.equal(report.tableCount, 30); assert.equal(report.addedSchools, 31); assert.equal(report.activeSchools, 31);
   assert.deepEqual(Array.from(report.createdTables).sort(), ['SCHOOLS', 'WORKS']);
   assert.match(report.spreadsheetUrl, /#gid=123$/); assert.equal(report.ownerPasswordReady, false);
   const before = structuredClone(f.sheets.get('SCHOOLS').rows);
@@ -54,6 +55,18 @@ test('editor setup repairs missing tables and seeds 31 schools once without gran
   assert.deepEqual(f.sheets.get('SCHOOLS').rows, before);
   assert.deepEqual(f.sheets.get('USERS').rows, users); assert.deepEqual(f.sheets.get('USER_ROLES').rows, roles);
   assert.equal(new Set(f.context.DETWIL_readAll('SCHOOLS').map(row => row.SchoolCode)).size, 31);
+});
+
+test('recovery bootstrap creates only its missing table and refuses changed headers', () => {
+  const f = fixture(); f.sheets.delete('PASSWORD_RESET_REQUESTS');
+  const before = structuredClone(f.sheets.get('AUTH_CREDENTIALS').rows);
+  assert.equal(f.context.DETWIL_preparePasswordRecovery().created, true);
+  assert.equal(f.context.DETWIL_preparePasswordRecovery().created, false);
+  assert.deepEqual(f.sheets.get('AUTH_CREDENTIALS').rows, before);
+  f.sheets.get('PASSWORD_RESET_REQUESTS').rows[0][0] = 'CUSTOM_ID';
+  const changed = structuredClone(f.sheets.get('PASSWORD_RESET_REQUESTS').rows);
+  assert.throws(() => f.context.DETWIL_preparePasswordRecovery(), { code: 'SCHEMA_MISMATCH' });
+  assert.deepEqual(f.sheets.get('PASSWORD_RESET_REQUESTS').rows, changed);
 });
 
 test('school seeding preserves existing IDs, edited codes, inactive and deleted records', () => {

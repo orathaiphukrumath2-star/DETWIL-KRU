@@ -31,6 +31,10 @@ const actions = [
   "roleDecision",
   "assignRoles",
   "resetMemberPassword",
+  "recoveryRequest",
+  "recoveryRequests",
+  "issuePasswordReset",
+  "completePasswordReset",
 ];
 
 export async function GET(request: NextRequest) {
@@ -85,7 +89,13 @@ export async function POST(request: NextRequest) {
     const jar = await cookies();
     const token = jar.get(sessionCookie)?.value || "";
     if (
-      !["register", "passwordLogin", "activateOwner"].includes(body.action) &&
+      ![
+        "register",
+        "passwordLogin",
+        "activateOwner",
+        "recoveryRequest",
+        "completePasswordReset",
+      ].includes(body.action) &&
       !token
     )
       throw new WorkApiError("UNAUTHORIZED", "กรุณาเข้าสู่ระบบ");
@@ -97,12 +107,12 @@ export async function POST(request: NextRequest) {
         "changePassword",
         "createUser",
         "resetMemberPassword",
+        "recoveryRequest",
+        "issuePasswordReset",
+        "completePasswordReset",
       ].includes(body.action)
     ) {
-      const ip = (
-        request.headers.get("x-forwarded-for") ||
-        "local"
-      )
+      const ip = (request.headers.get("x-forwarded-for") || "local")
         .split(",")[0]
         .trim()
         .slice(0, 80);
@@ -142,7 +152,11 @@ export async function POST(request: NextRequest) {
       { ok: true, data },
       { headers: { "Cache-Control": "no-store" } },
     );
-    if (["logout", "changePassword"].includes(body.action))
+    if (
+      ["logout", "changePassword", "completePasswordReset"].includes(
+        body.action,
+      )
+    )
       response.cookies.delete(sessionCookie);
     return response;
   } catch (error) {

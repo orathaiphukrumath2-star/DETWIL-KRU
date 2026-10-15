@@ -1,6 +1,6 @@
 var DETWIL = DETWIL || {};
 
-DETWIL.VERSION = '0.4.0-open-membership-reviewed-publication';
+DETWIL.VERSION = '0.5.0-password-recovery';
 
 DETWIL.PROJECT = Object.freeze({
   systemName: 'DETWIL',
@@ -48,6 +48,7 @@ DETWIL.SHEET_NAMES = Object.freeze({
   USERS: 'USERS',
   USER_ROLES: 'USER_ROLES',
   AUTH_CREDENTIALS: 'AUTH_CREDENTIALS',
+  PASSWORD_RESET_REQUESTS: 'PASSWORD_RESET_REQUESTS',
   SCHOOLS: 'SCHOOLS',
   TEACHER_PROFILES: 'TEACHER_PROFILES',
   TEACHER_PAGE_SETTINGS: 'TEACHER_PAGE_SETTINGS',
@@ -80,6 +81,7 @@ DETWIL.SHEET_SCHEMAS = Object.freeze({
   USERS: ['UserID', 'Email', 'DisplayName', 'SchoolID', 'PrimaryRole', 'AccountStatus', 'CanLogin', 'AuthMode', 'PasswordLoginEnabled', 'LastLoginAt', 'LoginCount', 'StartDate', 'EndDate', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'IsDeleted', 'DeletedAt', 'DeletedBy'],
   USER_ROLES: ['UserRoleID', 'UserID', 'RoleCode', 'ScopeType', 'ScopeID', 'StartDate', 'EndDate', 'Status', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'IsDeleted'],
   AUTH_CREDENTIALS: ['CredentialID', 'UserID', 'Email', 'PasswordHash', 'PasswordSalt', 'PasswordAlgorithm', 'PasswordUpdatedAt', 'MustChangePassword', 'FailedLoginCount', 'LockedUntil', 'LastFailedLoginAt', 'LastPasswordResetAt', 'ResetBy', 'CredentialStatus', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'IsDeleted'],
+  PASSWORD_RESET_REQUESTS: ['ResetRequestID', 'UserID', 'Email', 'Status', 'RequestedAt', 'TokenHash', 'ExpiresAt', 'ApprovedAt', 'ApprovedBy', 'CredentialID', 'CredentialVersionHash', 'UsedAt', 'UpdatedAt', 'IsDeleted'],
   SCHOOLS: ['SchoolID', 'SchoolCode', 'SchoolName', 'District', 'Province', 'Network', 'DirectorName', 'CoordinatorName', 'Email', 'Phone', 'Website', 'LogoFileID', 'Status', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'IsDeleted'],
   TEACHER_PROFILES: ['TeacherID', 'UserID', 'SchoolID', 'ProfileSlug', 'FullName', 'Position', 'AcademicRank', 'SubjectGroup', 'Subjects', 'GradeLevels', 'EducationHistory', 'WorkHistory', 'Expertise', 'Awards', 'FeaturedWorks', 'ContactEmailPublic', 'ContactPhonePublic', 'ProfileImageFileID', 'CoverImageFileID', 'ProfileStatus', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'IsDeleted'],
   TEACHER_PAGE_SETTINGS: ['PageSettingID', 'TeacherID', 'UserID', 'SchoolID', 'ThemeCode', 'PrimaryColor', 'AccentColor', 'HeroStyle', 'SectionOrderJson', 'SectionVisibilityJson', 'FeaturedContentJson', 'PublicContactJson', 'IsPublic', 'ViewCount', 'QrCodeFileID', 'UpdatedAt', 'UpdatedBy'],

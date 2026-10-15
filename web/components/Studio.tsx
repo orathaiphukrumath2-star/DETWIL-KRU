@@ -35,7 +35,7 @@ import {
   roleLabels,
 } from "@/lib/works";
 import { MemberAdmin, MemberProfile } from "@/components/Membership";
-import { memberApi as api } from "@/lib/workClient";
+import { memberApi as api, MemberApiError } from "@/lib/workClient";
 
 const blankContent = (): WorkContent => ({
   title: "",
@@ -57,6 +57,8 @@ type AdminData = { schools: School[]; users: Identity[] };
 export function Studio() {
   const [user, setUser] = useState<Identity | null>(null);
   const [booting, setBooting] = useState(true);
+  const [sessionUnavailable, setSessionUnavailable] = useState(false);
+  const [bootAttempt, setBootAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -107,9 +109,14 @@ export function Studio() {
 
   useEffect(() => {
     let active = true;
+    let identified = false;
+    setBooting(true);
+    setSessionUnavailable(false);
+    setError("");
     api<Identity>("session")
       .then(async (identity) => {
         if (!active) return;
+        identified = true;
         setUser(identity);
         if (
           !identity.mustChangePassword &&
@@ -121,14 +128,28 @@ export function Studio() {
           if (id) await openWork(id);
         } else setTab("profile");
       })
-      .catch(() => {})
+      .catch((error) => {
+        if (
+          !active ||
+          (!identified &&
+            error instanceof MemberApiError &&
+            error.code === "UNAUTHORIZED")
+        )
+          return;
+        setError(
+          error instanceof Error
+            ? error.message
+            : "ตรวจสอบการเข้าสู่ระบบไม่สำเร็จ",
+        );
+        setSessionUnavailable(!identified);
+      })
       .finally(() => {
         if (active) setBooting(false);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [bootAttempt]);
 
   function change<K extends keyof WorkContent>(key: K, value: WorkContent[K]) {
     setContent((previous) => ({ ...previous, [key]: value }));
@@ -381,6 +402,20 @@ export function Studio() {
             <LoaderCircle className="spin" size={26} />
             กำลังตรวจสอบการเข้าสู่ระบบ
           </div>
+        ) : sessionUnavailable ? (
+          <section className="studio-empty">
+            <LockKeyhole size={28} />
+            <h1>ยังตรวจสอบการเข้าสู่ระบบไม่สำเร็จ</h1>
+            <button
+              className="secondary-button"
+              onClick={() => setBootAttempt((attempt) => attempt + 1)}
+            >
+              <RotateCcw size={17} /> ตรวจสอบอีกครั้ง
+            </button>
+            <Link href="/forgot-password" className="text-link">
+              ลืมรหัสผ่าน
+            </Link>
+          </section>
         ) : !user ? (
           <div className="login-layout">
             <section className="login-intro">
@@ -443,7 +478,9 @@ export function Studio() {
                 <UsersRound size={17} />
                 สมัครสมาชิก
               </Link>
-              <span className="muted">ลืมรหัสผ่าน: ติดต่อผู้ดูแลระบบ</span>
+              <Link className="text-link" href="/forgot-password">
+                ลืมรหัสผ่าน
+              </Link>
             </form>
           </div>
         ) : user.mustChangePassword ? (

@@ -345,6 +345,7 @@ function DETWIL_workApi_(action, payload, token) {
     }
     if (action === 'changePassword') {
       lock = LockService.getScriptLock(); lock.waitLock(30000);
+      user = DETWIL_sessionUser_(token, true, true);
       var material = DETWIL_passwordMaterial_(payload);
       if (DETWIL_normalizeEmail(payload.email) !== user.Email) DETWIL_workError_('VALIDATION', 'อีเมลบัญชีไม่ตรงกัน');
       var cred = DETWIL_findFirstByField('AUTH_CREDENTIALS', 'UserID', user.UserID);

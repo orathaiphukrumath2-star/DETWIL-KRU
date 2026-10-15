@@ -38,6 +38,7 @@ export async function preparePasswordPayload(
     "changePassword",
     "createUser",
     "resetMemberPassword",
+    "completePasswordReset",
   ];
   if (!actions.includes(action)) return value;
   const email =

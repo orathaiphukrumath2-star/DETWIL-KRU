@@ -1,4 +1,5 @@
 export const sheetSchemas = {
+  PASSWORD_RESET_REQUESTS: ["ResetRequestID", "UserID", "Email", "Status", "RequestedAt", "TokenHash", "ExpiresAt", "ApprovedAt", "ApprovedBy", "CredentialID", "CredentialVersionHash", "UsedAt", "UpdatedAt", "IsDeleted"],
   WORKS: ["WorkID", "OwnerUserID", "SchoolID", "AuthorName", "SchoolName", "Title", "Subject", "GradeLevel", "AcademicYear", "WorkType", "ContentJson", "CurrentVersionID", "VersionNo", "ApprovalStatus", "IsPublic", "PublishedVersionID", "PublishedJson", "CreatedAt", "UpdatedAt", "IsDeleted"],
   AUTH_SESSIONS: ["SessionID", "TokenHash", "UserID", "ExpiresAt", "CreatedAt", "IsDeleted", "ActiveRoleID"],
   SETTINGS: ["SettingKey", "SettingValue", "ValueType", "Description", "IsSecret", "UpdatedAt", "UpdatedBy"],
