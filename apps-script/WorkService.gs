@@ -1,4 +1,4 @@
-var DETWIL_WORK_ACTIONS = ['activateOwner', 'publicWorks', 'publicWork', 'session', 'logout', 'changePassword', 'myWorks', 'getWork', 'saveWork', 'workflow', 'uploadFile', 'downloadFile', 'adminData', 'saveSchool', 'createUser'];
+var DETWIL_WORK_ACTIONS = ['activateOwner', 'publicWorks', 'publicWork', 'session', 'workspace', 'logout', 'changePassword', 'myWorks', 'getWork', 'saveWork', 'workflow', 'uploadFile', 'attachFile', 'downloadFile', 'adminData', 'saveSchool', 'createUser'];
 var DETWIL_WORK_TYPES = ['lesson', 'media', 'obec', 'research'];
 
 function DETWIL_workError_(code, message) {
@@ -26,13 +26,13 @@ function DETWIL_workWrite_(table, record, idField) {
   });
   var target = sheet.getLastRow() + 1;
   if (idField) {
-    var all = sheet.getDataRange().getValues();
-    var index = headers.indexOf(idField);
-    for (var i = 1; i < all.length; i++) {
-      if (String(all[i][index]) === String(record[idField])) { target = i + 1; break; }
+    var all = DETWIL_readAll(table);
+    for (var i = 0; i < all.length; i++) {
+      if (String(all[i][idField]) === String(record[idField])) { target = i + 2; break; }
     }
   }
   sheet.getRange(target, 1, 1, headers.length).setValues([row]);
+  if (typeof DETWIL_invalidateTable_ === 'function') DETWIL_invalidateTable_(table);
 }
 
 function DETWIL_upgradeWorkSystem_() {
@@ -149,7 +149,40 @@ function DETWIL_workLogin_(payload) {
   session.ActiveRoleID = user._activeRoleId;
   DETWIL_workWrite_('AUTH_SESSIONS', session);
   user.mustChangePassword = DETWIL_bool(cred.MustChangePassword);
-  return { token: sessionToken, user: DETWIL_identity_(user), maxAge: maxAge };
+  return { token: sessionToken, user: DETWIL_identity_(user), maxAge: maxAge, workspace: payload.includeWorkspace === true ? DETWIL_workspace_(user, payload) : undefined };
+}
+
+function DETWIL_myWorks_(user, payload) {
+  var rows = DETWIL_readAll('WORKS').filter(function(w) { return !DETWIL_bool(w.IsDeleted) && DETWIL_canReadWork_(user, w) && (payload.queue ? (w.OwnerUserID !== user.UserID && (user.PrimaryRole === 'SCHOOL_ADMIN' ? w.ApprovalStatus === 'SCHOOL_PENDING' : DETWIL_areaRole_(user) && w.ApprovalStatus === 'DISTRICT_PENDING')) : w.OwnerUserID === user.UserID); });
+  rows.reverse();
+  var offset = Math.max(0, Math.floor(Number(payload.offset) || 0));
+  return { items: rows.slice(offset, offset + 30).map(DETWIL_privateProjection_), total: rows.length, schools: DETWIL_readAll('SCHOOLS').filter(function(s) { return s.Status === 'ACTIVE' && !DETWIL_bool(s.IsDeleted) && (DETWIL_areaRole_(user) || s.SchoolID === user.SchoolID); }).map(function(s) { return { id: s.SchoolID, name: s.SchoolName }; }) };
+}
+
+function DETWIL_workDetails_(work) {
+  var data = DETWIL_privateProjection_(work);
+  data.history = DETWIL_readAll('WORKFLOW_LOG').filter(function(log) { return log.RecordType === 'WORK' && log.RecordID === work.WorkID; }).slice(-50).map(function(log) { return { action: log.Action, comment: log.Comment, role: log.ActorRole, createdAt: log.CreatedAt, versionId: log.VersionID }; });
+  return data;
+}
+
+function DETWIL_workspace_(user, payload) {
+  var data = { user: DETWIL_identity_(user) };
+  if (user.mustChangePassword || user.AccountStatus !== 'ACTIVE' || !user._activeRoleId) return data;
+  data.works = DETWIL_myWorks_(user, {});
+  if (payload.id) {
+    try {
+    var work = DETWIL_workRow_(payload.id);
+    if (!DETWIL_canReadWork_(user, work)) DETWIL_workError_('FORBIDDEN', 'ไม่มีสิทธิ์อ่านผลงานนี้');
+    data.work = DETWIL_workDetails_(work);
+    } catch (error) { data.workError = error.code ? error.message : 'ไม่สามารถเปิดผลงานที่ระบุได้'; }
+  }
+  return data;
+}
+
+function DETWIL_workGrade_(value) {
+  var match = String(value || '').replace(/\s/g, '').match(/^(?:ม\.?|m\.?|(?:ชั้น)?มัธยมศึกษาปีที่)([1-6])$/i);
+  if (!match) DETWIL_workError_('VALIDATION', 'กรุณาเลือกระดับชั้นมัธยมศึกษาปีที่ 1–6');
+  return 'มัธยมศึกษาปีที่ ' + match[1];
 }
 
 function DETWIL_areaRole_(user) { return ['SUPER_ADMIN', 'AREA_ADMIN', 'SUPERVISOR'].indexOf(user.PrimaryRole) >= 0; }
@@ -167,6 +200,10 @@ function DETWIL_cleanContent_(input, user, work) {
   var school = DETWIL_findFirstByField('SCHOOLS', 'SchoolID', String(schoolId || ''));
   if (!school || school.Status !== 'ACTIVE') DETWIL_workError_('VALIDATION', 'กรุณาระบุสถานศึกษาที่เปิดใช้งาน');
   var content = { title: DETWIL_workText_(value.title, 200, true), subject: DETWIL_workText_(value.subject, 100, true), gradeLevel: DETWIL_workText_(value.gradeLevel, 100, true), academicYear: DETWIL_workText_(value.academicYear, 4, true), workType: value.workType, description: DETWIL_workText_(value.description, 4000, true), objectives: DETWIL_workText_(value.objectives, 3000, false), results: DETWIL_workText_(value.results, 3000, false), authorName: user.DisplayName, schoolId: school.SchoolID, schoolName: school.SchoolName };
+  content.gradeLevel = DETWIL_workGrade_(content.gradeLevel);
+  content.themeCode = value.themeCode || 'classic';
+  content.colorCode = value.colorCode || 'teal';
+  if (['classic', 'bright', 'editorial'].indexOf(content.themeCode) < 0 || ['teal', 'blue', 'rose', 'green', 'amber'].indexOf(content.colorCode) < 0) DETWIL_workError_('VALIDATION', 'ธีมหรือสีที่เลือกไม่ถูกต้อง');
   if (!/^25\d{2}$/.test(content.academicYear) || DETWIL_WORK_TYPES.indexOf(content.workType) < 0) DETWIL_workError_('VALIDATION', 'ปีการศึกษาหรือประเภทผลงานไม่ถูกต้อง');
   if (!Array.isArray(value.attachments) || value.attachments.length > 20) DETWIL_workError_('VALIDATION', 'แนบหลักฐานได้ไม่เกิน 20 รายการ');
   content.attachments = value.attachments.map(function(item) {
@@ -234,7 +271,7 @@ function DETWIL_saveWork_(payload, user) {
   DETWIL_workWrite_('RECORD_VERSIONS', { VersionID: work.CurrentVersionID, RecordType: 'WORK', RecordID: work.WorkID, VersionNo: work.VersionNo, SnapshotJson: work.ContentJson, ChangeReason: 'SAVE', VersionStatus: 'SAVED', CreatedAt: now, CreatedBy: user.UserID });
   DETWIL_workWrite_('WORKS', work, 'WorkID');
   DETWIL_workLog_(work, user, 'SAVE', previous);
-  return DETWIL_privateProjection_(work);
+  return payload.includeHistory === true ? DETWIL_workDetails_(work) : DETWIL_privateProjection_(work);
 }
 
 function DETWIL_workflow_(payload, user) {
@@ -269,7 +306,19 @@ function DETWIL_workflow_(payload, user) {
   work.UpdatedAt = DETWIL_nowIso();
   DETWIL_workWrite_('WORKS', work, 'WorkID');
   DETWIL_workLog_(work, user, action, previous, payload.comment);
-  return DETWIL_privateProjection_(work);
+  return payload.includeHistory === true ? DETWIL_workDetails_(work) : DETWIL_privateProjection_(work);
+}
+
+function DETWIL_attachFile_(payload, user) {
+  var work = DETWIL_workRow_(payload.id);
+  DETWIL_requireOwner_(user, work);
+  if (payload.versionId !== work.CurrentVersionID) DETWIL_workError_('CONFLICT', 'รุ่นผลงานเปลี่ยนแล้ว กรุณาโหลดใหม่ก่อนอัปโหลด');
+  var content = DETWIL_cleanContent_(payload.content, user, work);
+  if (content.attachments.length >= 20 || ['PLAN', 'MEDIA', 'STUDENT', 'EVIDENCE'].indexOf(payload.category) < 0) DETWIL_workError_('VALIDATION', 'ประเภทหรือจำนวนหลักฐานไม่ถูกต้อง');
+  var title = DETWIL_workText_(payload.title, 200, true);
+  var uploaded = DETWIL_uploadFile_(payload, user);
+  content.attachments.push({ id: DETWIL_uuid(), category: payload.category, title: title, fileId: uploaded.fileId, url: '', isPublic: payload.isPublic === true });
+  return DETWIL_saveWork_({ id: work.WorkID, versionId: work.CurrentVersionID, content: content, includeHistory: true }, user);
 }
 
 function DETWIL_uploadFile_(payload, user) {
@@ -335,17 +384,20 @@ function DETWIL_workApi_(action, payload, token) {
       lock = LockService.getScriptLock(); lock.waitLock(30000);
       return DETWIL_jsonSuccess(DETWIL_workLogin_(payload));
     }
-    var limited = ['session', 'logout', 'changePassword'].indexOf(action) >= 0;
+    if (['changePassword', 'createUser', 'saveSchool', 'saveWork', 'workflow', 'uploadFile', 'attachFile'].indexOf(action) >= 0) {
+      lock = LockService.getScriptLock(); lock.waitLock(30000);
+      if (typeof DETWIL_refreshReads_ === 'function') DETWIL_refreshReads_();
+    }
+    var limited = ['session', 'workspace', 'logout', 'changePassword'].indexOf(action) >= 0;
     var user = DETWIL_sessionUser_(token, limited, limited);
     if (action === 'session') return DETWIL_jsonSuccess(DETWIL_identity_(user));
+    if (action === 'workspace') return DETWIL_jsonSuccess(DETWIL_workspace_(user, payload));
     if (action === 'logout') {
       var session = DETWIL_findFirstByField('AUTH_SESSIONS', 'TokenHash', DETWIL_workHash_(token));
       DETWIL_updateRecordById('AUTH_SESSIONS', 'SessionID', session.SessionID, { IsDeleted: 'TRUE' });
       return DETWIL_jsonSuccess({ loggedOut: true });
     }
     if (action === 'changePassword') {
-      lock = LockService.getScriptLock(); lock.waitLock(30000);
-      user = DETWIL_sessionUser_(token, true, true);
       var material = DETWIL_passwordMaterial_(payload);
       if (DETWIL_normalizeEmail(payload.email) !== user.Email) DETWIL_workError_('VALIDATION', 'อีเมลบัญชีไม่ตรงกัน');
       var cred = DETWIL_findFirstByField('AUTH_CREDENTIALS', 'UserID', user.UserID);
@@ -358,16 +410,12 @@ function DETWIL_workApi_(action, payload, token) {
       return DETWIL_jsonSuccess({ changed: true });
     }
     if (action === 'myWorks') {
-      var rows = DETWIL_readAll('WORKS').filter(function(w) { return !DETWIL_bool(w.IsDeleted) && DETWIL_canReadWork_(user, w) && (payload.queue ? (w.OwnerUserID !== user.UserID && (user.PrimaryRole === 'SCHOOL_ADMIN' ? w.ApprovalStatus === 'SCHOOL_PENDING' : DETWIL_areaRole_(user) && w.ApprovalStatus === 'DISTRICT_PENDING')) : w.OwnerUserID === user.UserID); });
-      var offset = Math.max(0, Math.floor(Number(payload.offset) || 0));
-      return DETWIL_jsonSuccess({ items: rows.slice(offset, offset + 30).map(DETWIL_privateProjection_), total: rows.length, schools: DETWIL_readAll('SCHOOLS').filter(function(s) { return s.Status === 'ACTIVE' && !DETWIL_bool(s.IsDeleted) && (DETWIL_areaRole_(user) || s.SchoolID === user.SchoolID); }).map(function(s) { return { id: s.SchoolID, name: s.SchoolName }; }) });
+      return DETWIL_jsonSuccess(DETWIL_myWorks_(user, payload));
     }
     if (action === 'getWork') {
       var work = DETWIL_workRow_(payload.id);
       if (!DETWIL_canReadWork_(user, work)) DETWIL_workError_('FORBIDDEN', 'ไม่มีสิทธิ์อ่านผลงานนี้');
-      var data = DETWIL_privateProjection_(work);
-      data.history = DETWIL_readAll('WORKFLOW_LOG').filter(function(log) { return log.RecordType === 'WORK' && log.RecordID === work.WorkID; }).slice(-50).map(function(log) { return { action: log.Action, comment: log.Comment, role: log.ActorRole, createdAt: log.CreatedAt, versionId: log.VersionID }; });
-      return DETWIL_jsonSuccess(data);
+      return DETWIL_jsonSuccess(DETWIL_workDetails_(work));
     }
     if (action === 'adminData') {
       if (user.PrimaryRole !== 'SUPER_ADMIN') DETWIL_workError_('FORBIDDEN', 'เฉพาะผู้ดูแลระบบ');
@@ -376,7 +424,6 @@ function DETWIL_workApi_(action, payload, token) {
       return DETWIL_jsonSuccess({ schools: schools.map(function(s) { return { id: s.SchoolID, name: s.SchoolName, code: s.SchoolCode }; }), users: DETWIL_readAll('USERS').filter(function(u) { return !DETWIL_bool(u.IsDeleted); }).map(function(u) { return DETWIL_memberIdentity_(u, DETWIL_memberRoles_(u.UserID, grants, schools)); }) });
     }
     if (action === 'createUser') {
-      lock = LockService.getScriptLock(); lock.waitLock(30000);
       if (user.PrimaryRole !== 'SUPER_ADMIN') DETWIL_workError_('FORBIDDEN', 'เฉพาะผู้ดูแลระบบ');
       var newMaterial = DETWIL_passwordMaterial_(payload);
       var email = DETWIL_normalizeEmail(payload.email);
@@ -390,8 +437,6 @@ function DETWIL_workApi_(action, payload, token) {
       DETWIL_workWrite_('USER_ROLES', { UserRoleID: DETWIL_uuid(), UserID: newUser.UserID, RoleCode: newUser.PrimaryRole, ScopeType: newUser.SchoolID ? 'SCHOOL' : 'GLOBAL', ScopeID: newUser.SchoolID || 'DETWIL', Status: 'ACTIVE', CreatedAt: DETWIL_nowIso(), CreatedBy: user.UserID, IsDeleted: 'FALSE' });
       return DETWIL_jsonSuccess(DETWIL_identity_(newUser));
     }
-    lock = LockService.getScriptLock(); lock.waitLock(30000);
-    user = DETWIL_sessionUser_(token, false);
     if (action === 'saveSchool') {
       if (user.PrimaryRole !== 'SUPER_ADMIN') DETWIL_workError_('FORBIDDEN', 'เฉพาะผู้ดูแลระบบ');
       var code = DETWIL_workText_(payload.code, 30, true);
@@ -403,6 +448,7 @@ function DETWIL_workApi_(action, payload, token) {
     if (action === 'saveWork') return DETWIL_jsonSuccess(DETWIL_saveWork_(payload, user));
     if (action === 'workflow') return DETWIL_jsonSuccess(DETWIL_workflow_(payload, user));
     if (action === 'uploadFile') return DETWIL_jsonSuccess(DETWIL_uploadFile_(payload, user));
+    if (action === 'attachFile') return DETWIL_jsonSuccess(DETWIL_attachFile_(payload, user));
     DETWIL_workError_('UNKNOWN_ACTION', 'ไม่พบคำสั่ง');
   } catch (err) {
     return DETWIL_jsonError(err.code || 'WORK_SYSTEM_NOT_READY', err.code ? err.message : 'ระบบผลงานยังไม่พร้อม กรุณาให้ผู้ดูแลรัน DETWIL_prepareWorkSystem ใน Apps Script');

@@ -1,23 +1,36 @@
+var DETWIL_REQUEST_CACHE_ = null;
+
+// This cache lives for one HTTP request only. Never persist account or role checks across requests.
+function DETWIL_beginRequest_() { DETWIL_REQUEST_CACHE_ = { sheets: {}, headers: {}, rows: {} }; }
+function DETWIL_endRequest_() { DETWIL_REQUEST_CACHE_ = null; }
+function DETWIL_refreshReads_() { if (DETWIL_REQUEST_CACHE_) DETWIL_REQUEST_CACHE_.rows = {}; }
+function DETWIL_invalidateTable_(name) { if (DETWIL_REQUEST_CACHE_) delete DETWIL_REQUEST_CACHE_.rows[name]; }
+
 function DETWIL_getScriptProperties_() {
   return PropertiesService.getScriptProperties();
 }
 
 function DETWIL_getSpreadsheet() {
+  if (DETWIL_REQUEST_CACHE_ && DETWIL_REQUEST_CACHE_.book) return DETWIL_REQUEST_CACHE_.book;
   var spreadsheetId = DETWIL_getScriptProperties_().getProperty(DETWIL.PROPERTY_KEYS.SPREADSHEET_ID);
   if (!spreadsheetId) {
     var active = SpreadsheetApp.getActiveSpreadsheet();
     if (active) return active;
     throw new Error('DETWIL_SPREADSHEET_ID is not set. Run DETWIL_setupNewProject first.');
   }
-  return SpreadsheetApp.openById(spreadsheetId);
+  var book = SpreadsheetApp.openById(spreadsheetId);
+  if (DETWIL_REQUEST_CACHE_) DETWIL_REQUEST_CACHE_.book = book;
+  return book;
 }
 
 function DETWIL_getSheet(sheetName) {
+  if (DETWIL_REQUEST_CACHE_ && DETWIL_REQUEST_CACHE_.sheets[sheetName]) return DETWIL_REQUEST_CACHE_.sheets[sheetName];
   var spreadsheet = DETWIL_getSpreadsheet();
   var sheet = spreadsheet.getSheetByName(sheetName);
   if (!sheet) {
     throw new Error('Sheet not found: ' + sheetName);
   }
+  if (DETWIL_REQUEST_CACHE_) DETWIL_REQUEST_CACHE_.sheets[sheetName] = sheet;
   return sheet;
 }
 
@@ -37,6 +50,8 @@ function DETWIL_ensureSheet(sheetName) {
   }
   var headers = DETWIL_getSchema(sheetName);
   DETWIL_ensureHeaders(sheet, headers);
+  DETWIL_invalidateTable_(sheetName);
+  if (DETWIL_REQUEST_CACHE_) delete DETWIL_REQUEST_CACHE_.headers[sheetName];
   return sheet;
 }
 
@@ -61,30 +76,37 @@ function DETWIL_ensureHeaders(sheet, headers) {
 }
 
 function DETWIL_getHeaders(sheetName) {
+  if (DETWIL_REQUEST_CACHE_ && DETWIL_REQUEST_CACHE_.headers[sheetName]) return DETWIL_REQUEST_CACHE_.headers[sheetName].slice();
   var sheet = DETWIL_getSheet(sheetName);
   var lastColumn = Math.max(sheet.getLastColumn(), DETWIL_getSchema(sheetName).length);
-  return sheet.getRange(1, 1, 1, lastColumn).getValues()[0].filter(String);
+  var headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0].filter(String);
+  if (DETWIL_REQUEST_CACHE_) DETWIL_REQUEST_CACHE_.headers[sheetName] = headers;
+  return headers.slice();
 }
 
 function DETWIL_readAll(sheetName) {
+  if (DETWIL_REQUEST_CACHE_ && DETWIL_REQUEST_CACHE_.rows[sheetName]) return DETWIL_REQUEST_CACHE_.rows[sheetName].map(function(row) { return Object.assign({}, row); });
   var sheet = DETWIL_getSheet(sheetName);
   var headers = DETWIL_getHeaders(sheetName);
   var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return [];
-  var values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
-  return values.map(function(row) {
+  var values = lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  var records = values.map(function(row) {
     return DETWIL_toRecord(headers, row);
   });
+  if (DETWIL_REQUEST_CACHE_) DETWIL_REQUEST_CACHE_.rows[sheetName] = records;
+  return records.map(function(row) { return Object.assign({}, row); });
 }
 
 function DETWIL_appendRecord(sheetName, record) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
+  DETWIL_refreshReads_();
   try {
     var sheet = DETWIL_ensureSheet(sheetName);
     var headers = DETWIL_getHeaders(sheetName);
     var row = DETWIL_toRow(headers, record);
     sheet.appendRow(row);
+    DETWIL_invalidateTable_(sheetName);
     return record;
   } finally {
     lock.releaseLock();
@@ -95,6 +117,7 @@ function DETWIL_appendRecords(sheetName, records) {
   if (!records || !records.length) return [];
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
+  DETWIL_refreshReads_();
   try {
     var sheet = DETWIL_ensureSheet(sheetName);
     var headers = DETWIL_getHeaders(sheetName);
@@ -102,6 +125,7 @@ function DETWIL_appendRecords(sheetName, records) {
       return DETWIL_toRow(headers, record);
     });
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
+    DETWIL_invalidateTable_(sheetName);
     return records;
   } finally {
     lock.releaseLock();
@@ -146,6 +170,7 @@ function DETWIL_listRecords(sheetName, options) {
 function DETWIL_updateRecordById(sheetName, idField, idValue, patch) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
+  DETWIL_refreshReads_();
   try {
     var sheet = DETWIL_getSheet(sheetName);
     var headers = DETWIL_getHeaders(sheetName);
@@ -162,6 +187,7 @@ function DETWIL_updateRecordById(sheetName, idField, idValue, patch) {
         });
         var targetRow = i + 2;
         sheet.getRange(targetRow, 1, 1, headers.length).setValues([DETWIL_toRow(headers, current)]);
+        DETWIL_invalidateTable_(sheetName);
         return current;
       }
     }

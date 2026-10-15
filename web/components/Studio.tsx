@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   Plus,
@@ -22,6 +22,8 @@ import {
   BookOpen,
   LoaderCircle,
   LockKeyhole,
+  ExternalLink,
+  Palette,
 } from "lucide-react";
 import {
   approvalLabels,
@@ -33,9 +35,19 @@ import {
   type Work,
   type WorkContent,
   roleLabels,
+  type Workspace,
 } from "@/lib/works";
 import { MemberAdmin, MemberProfile } from "@/components/Membership";
 import { memberApi as api, MemberApiError } from "@/lib/workClient";
+import { WorkView } from "@/components/WorkView";
+import {
+  attachmentHref,
+  gradeLevels,
+  normalizeGrade,
+  updateWorkList,
+  workColors,
+  workThemes,
+} from "@/lib/presentation";
 
 const blankContent = (): WorkContent => ({
   title: "",
@@ -50,6 +62,8 @@ const blankContent = (): WorkContent => ({
   schoolId: "",
   schoolName: "",
   attachments: [],
+  themeCode: "classic",
+  colorCode: "teal",
 });
 type ListData = { items: Work[]; total: number; schools: School[] };
 type AdminData = { schools: School[]; users: Identity[] };
@@ -69,6 +83,7 @@ export function Studio() {
     schools: [],
   });
   const [offset, setOffset] = useState(0);
+  const [listNeedsRefresh, setListNeedsRefresh] = useState(false);
   const [selected, setSelected] = useState<Work | null>(null);
   const [editing, setEditing] = useState(false);
   const [content, setContent] = useState<WorkContent>(blankContent);
@@ -78,15 +93,67 @@ export function Studio() {
   const [category, setCategory] = useState("PLAN");
   const [comment, setComment] = useState("");
   const [admin, setAdmin] = useState<AdminData>({ schools: [], users: [] });
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewDialog = useRef<HTMLDialogElement>(null);
+  const attachmentForm = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (previewOpen) previewDialog.current?.showModal();
+  }, [previewOpen]);
+  useEffect(() => {
+    if (attachmentOpen)
+      attachmentForm.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+  }, [attachmentOpen, category]);
+
+  function acceptWork(data: Work, created = false) {
+    setSelected(data);
+    setContent({
+      ...data.content,
+      gradeLevel: normalizeGrade(data.content.gradeLevel),
+    });
+    setDirty(false);
+    setList((previous) =>
+      updateWorkList(previous, data, created, tab === "queue"),
+    );
+    if (created) setOffset(0);
+    if (created && offset > 0) setListNeedsRefresh(true);
+  }
+  function acceptWorkspace(data: Workspace) {
+    setUser(data.user);
+    if (data.workError) setError(data.workError);
+    if (data.works) setList(data.works);
+    setListNeedsRefresh(false);
+    if (data.work) {
+      setSelected(data.work);
+      setContent({
+        ...data.work.content,
+        gradeLevel: normalizeGrade(data.work.content.gradeLevel),
+      });
+      setEditing(true);
+      setDirty(false);
+    }
+    if (
+      data.user.mustChangePassword ||
+      data.user.accountStatus !== "ACTIVE" ||
+      !data.user.activeRoleId
+    )
+      setTab("profile");
+  }
 
   async function loadList(queue = false, start = 0) {
     const data = await api<ListData>("myWorks", { queue, offset: start });
     setList(data);
+    setListNeedsRefresh(false);
   }
   async function openWork(id: string) {
     const data = await api<Work>("getWork", { id });
     setSelected(data);
-    setContent(data.content);
+    setContent({
+      ...data.content,
+      gradeLevel: normalizeGrade(data.content.gradeLevel),
+    });
     setEditing(true);
     setDirty(false);
     setComment("");
@@ -113,20 +180,13 @@ export function Studio() {
     setBooting(true);
     setSessionUnavailable(false);
     setError("");
-    api<Identity>("session")
-      .then(async (identity) => {
+    api<Workspace>("workspace", {
+      id: new URLSearchParams(window.location.search).get("id") || undefined,
+    })
+      .then((data) => {
         if (!active) return;
         identified = true;
-        setUser(identity);
-        if (
-          !identity.mustChangePassword &&
-          identity.accountStatus === "ACTIVE" &&
-          identity.activeRoleId
-        ) {
-          await loadList();
-          const id = new URLSearchParams(window.location.search).get("id");
-          if (id) await openWork(id);
-        } else setTab("profile");
+        acceptWorkspace(data);
       })
       .catch((error) => {
         if (
@@ -182,13 +242,24 @@ export function Studio() {
     const form = event.currentTarget;
     const data = new FormData(form);
     await perform(async () => {
-      const identity = await api<Identity>("passwordLogin", {
-        email: data.get("email"),
-        password: data.get("password"),
-        remember: data.get("remember") === "on",
-      });
+      const identity = await api<Identity & { workspace?: Workspace }>(
+        "passwordLogin",
+        {
+          email: data.get("email"),
+          password: data.get("password"),
+          remember: data.get("remember") === "on",
+          includeWorkspace: true,
+          id:
+            new URLSearchParams(window.location.search).get("id") || undefined,
+        },
+      );
       form.reset();
       setUser(identity);
+      if (identity.workspace) {
+        setTab("mine");
+        acceptWorkspace(identity.workspace);
+        return;
+      }
       if (
         !identity.mustChangePassword &&
         identity.accountStatus === "ACTIVE" &&
@@ -208,12 +279,10 @@ export function Studio() {
         id: selected?.id,
         versionId: selected?.versionId,
         content,
+        includeHistory: true,
       });
-      setSelected(result);
-      setContent(result.content);
-      setDirty(false);
+      acceptWork(result, !selected);
       setNotice("บันทึกฉบับร่างแล้ว");
-      await loadList(tab === "queue", offset);
     });
   }
   async function command(action: string) {
@@ -224,15 +293,15 @@ export function Studio() {
         versionId: selected.versionId,
         command: action,
         comment,
+        includeHistory: true,
       });
-      setSelected(await api<Work>("getWork", { id: result.id }));
+      acceptWork(result);
       setComment("");
       setNotice(
         action === "PUBLISH"
           ? "เผยแพร่แล้ว ลิงก์ผลงานเปิดได้โดยไม่ต้องเข้าสู่ระบบ"
           : "ปรับสถานะผลงานแล้ว",
       );
-      await loadList(tab === "queue", offset);
     });
   }
   async function addAttachment(event: FormEvent<HTMLFormElement>) {
@@ -249,6 +318,11 @@ export function Studio() {
         isPublic: data.get("isPublic") === "on",
       };
       if (source === "file") {
+        const workForm = document.getElementById(
+          "work-form",
+        ) as HTMLFormElement | null;
+        if (workForm && !workForm.reportValidity())
+          throw new Error("กรุณากรอกข้อมูลชุดผลงานให้ครบก่อนอัปโหลด");
         const file = data.get("file");
         if (!(file instanceof File) || !file.size || file.size > 2097152)
           throw new Error(
@@ -261,14 +335,22 @@ export function Studio() {
           reader.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
           reader.readAsDataURL(file);
         });
-        item.fileId = (
-          await api<{ fileId: string }>("uploadFile", {
-            id: selected.id,
-            name: file.name,
-            mime: file.type,
-            base64,
-          })
-        ).fileId;
+        const saved = await api<Work>("attachFile", {
+          id: selected.id,
+          name: file.name,
+          mime: file.type,
+          base64,
+          versionId: selected.versionId,
+          content,
+          category,
+          title: item.title,
+          isPublic: item.isPublic,
+        });
+        acceptWork(saved);
+        form.reset();
+        setAttachmentOpen(false);
+        setNotice("อัปโหลดไฟล์และบันทึกชุดผลงานแล้ว");
+        return;
       } else {
         const url = new URL(String(data.get("url") || ""));
         if (url.protocol !== "https:" || url.username || url.password)
@@ -695,7 +777,18 @@ export function Studio() {
                         <RotateCcw size={17} />
                       </button>
                     </div>
-                    {list.items.length ? (
+                    {listNeedsRefresh ? (
+                      <div className="studio-empty">
+                        {busy ? (
+                          <>
+                            <LoaderCircle className="spin" size={24} />
+                            กำลังโหลดรายการล่าสุด
+                          </>
+                        ) : (
+                          "รายการผลงานเปลี่ยนแล้ว กรุณาโหลดรายการใหม่"
+                        )}
+                      </div>
+                    ) : list.items.length ? (
                       <div className="studio-work-list">
                         {list.items.map((work) => (
                           <button
@@ -782,7 +875,10 @@ export function Studio() {
                   <button
                     className="text-link"
                     disabled={busy}
-                    onClick={leaveEditor}
+                    onClick={() => {
+                      if (leaveEditor() && listNeedsRefresh)
+                        void perform(() => loadList(tab === "queue", 0));
+                    }}
                   >
                     <ArrowLeft size={17} />
                     รายการผลงาน
@@ -832,14 +928,20 @@ export function Studio() {
                             </label>
                             <label>
                               ระดับชั้น
-                              <input
+                              <select
                                 value={content.gradeLevel}
                                 onChange={(e) =>
                                   change("gradeLevel", e.target.value)
                                 }
                                 required
-                                maxLength={100}
-                              />
+                              >
+                                <option value="">เลือกระดับชั้น</option>
+                                {gradeLevels.map((grade) => (
+                                  <option key={grade} value={grade}>
+                                    ชั้น{grade}
+                                  </option>
+                                ))}
+                              </select>
                             </label>
                             <label>
                               ปีการศึกษา (พ.ศ.)
@@ -922,14 +1024,32 @@ export function Studio() {
                           {Object.entries(categoryLabels).map(
                             ([key, label]) => (
                               <div className="attachment-group" key={key}>
-                                <h3>
-                                  {label}
-                                  {["PLAN", "MEDIA"].includes(key) && (
-                                    <span className="required-mark">
-                                      จำเป็นก่อนส่งตรวจ
-                                    </span>
+                                <div className="attachment-heading">
+                                  <h3>
+                                    {label}
+                                    {["PLAN", "MEDIA"].includes(key) && (
+                                      <span className="required-mark">
+                                        จำเป็นก่อนส่งตรวจ
+                                      </span>
+                                    )}
+                                  </h3>
+                                  {!readonly && (
+                                    <button
+                                      type="button"
+                                      className="secondary-button"
+                                      disabled={
+                                        content.attachments.length >= 20
+                                      }
+                                      onClick={() => {
+                                        setCategory(key);
+                                        setSource("link");
+                                        setAttachmentOpen(true);
+                                      }}
+                                    >
+                                      <Plus size={16} /> เพิ่มไฟล์ / ลิงก์
+                                    </button>
                                   )}
-                                </h3>
+                                </div>
                                 {content.attachments
                                   .filter((a) => a.category === key)
                                   .map((item) => (
@@ -944,6 +1064,30 @@ export function Studio() {
                                           {item.fileId ? "ไฟล์แนบ" : item.url}
                                         </span>
                                       </div>
+                                      {attachmentHref(
+                                        selected?.id || "",
+                                        item,
+                                        true,
+                                      ) && (
+                                        <a
+                                          className="resource-open"
+                                          href={attachmentHref(
+                                            selected?.id || "",
+                                            item,
+                                            true,
+                                          )}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title={`เปิด ${item.title}`}
+                                        >
+                                          <ExternalLink size={17} />
+                                          <span>
+                                            {item.fileId
+                                              ? "เปิดไฟล์"
+                                              : "เปิดเนื้อหา"}
+                                          </span>
+                                        </a>
+                                      )}
                                       <label className="checkbox-label">
                                         <input
                                           type="checkbox"
@@ -1023,10 +1167,58 @@ export function Studio() {
                             />
                           </label>
                         </section>
+                        <section className="editor-section">
+                          <h2>
+                            <span className="section-number">04</span>
+                            <Palette size={20} /> รูปแบบนำเสนอผลงาน
+                          </h2>
+                          <label>
+                            ธีมหน้าเว็บไซต์
+                            <select
+                              value={content.themeCode || "classic"}
+                              onChange={(event) =>
+                                change("themeCode", event.target.value)
+                              }
+                            >
+                              {workThemes.map((theme) => (
+                                <option key={theme.code} value={theme.code}>
+                                  {theme.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <fieldset className="color-picker">
+                            <legend>สีหลัก</legend>
+                            <div className="color-swatches">
+                              {workColors.map((color) => (
+                                <label key={color.code} title={color.name}>
+                                  <input
+                                    type="radio"
+                                    name="work-color"
+                                    value={color.code}
+                                    checked={
+                                      (content.colorCode || "teal") ===
+                                      color.code
+                                    }
+                                    onChange={() =>
+                                      change("colorCode", color.code)
+                                    }
+                                  />
+                                  <span
+                                    className="color-dot"
+                                    style={{ backgroundColor: color.color }}
+                                  />
+                                  <span>{color.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </fieldset>
+                        </section>
                       </fieldset>
                     </form>
                     {attachmentOpen && !readonly && (
                       <form
+                        ref={attachmentForm}
                         className="attachment-form"
                         onSubmit={addAttachment}
                       >
@@ -1120,8 +1312,16 @@ export function Studio() {
                           อนุญาตเผยแพร่หลักฐานนี้สาธารณะ
                         </label>
                         <button className="primary-button" disabled={busy}>
-                          <Paperclip size={17} />
-                          เพิ่มหลักฐาน
+                          {busy ? (
+                            <LoaderCircle className="spin" size={17} />
+                          ) : (
+                            <Paperclip size={17} />
+                          )}
+                          {busy
+                            ? "กำลังบันทึก"
+                            : source === "file"
+                              ? "อัปโหลดและบันทึก"
+                              : "เพิ่มลิงก์"}
                         </button>
                       </form>
                     )}
@@ -1164,6 +1364,13 @@ export function Studio() {
                   </div>
                   <aside className="editor-actions">
                     <h2>สถานะและลิงก์ผลงาน</h2>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => setPreviewOpen(true)}
+                    >
+                      <Eye size={17} /> ดูตัวอย่างรูปแบบ
+                    </button>
                     {selected && (
                       <>
                         <span className="approval-badge">
@@ -1343,6 +1550,50 @@ export function Studio() {
               </>
             )}
           </>
+        )}
+        {previewOpen && (
+          <dialog
+            ref={previewDialog}
+            className="work-preview-dialog"
+            onClose={() => setPreviewOpen(false)}
+          >
+            <div className="preview-dialog-toolbar">
+              <strong>
+                {dirty ? "ตัวอย่างที่ยังไม่บันทึก" : "ตัวอย่างรูปแบบผลงาน"}
+              </strong>
+              <button
+                type="button"
+                autoFocus
+                className="icon-button"
+                title="ปิดตัวอย่าง"
+                aria-label="ปิดตัวอย่าง"
+                onClick={() => previewDialog.current?.close()}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <WorkView
+              preview
+              work={{
+                id: selected?.id || "",
+                content: {
+                  ...content,
+                  authorName: content.authorName || user?.displayName || "",
+                  schoolName:
+                    content.schoolName ||
+                    list.schools.find(
+                      (school) => school.id === content.schoolId,
+                    )?.name ||
+                    "",
+                },
+                versionId: selected?.versionId || "",
+                approvalStatus: dirty
+                  ? "DRAFT"
+                  : selected?.approvalStatus || "DRAFT",
+                isPublic: false,
+              }}
+            />
+          </dialog>
         )}
       </main>
       <footer className="studio-footer">

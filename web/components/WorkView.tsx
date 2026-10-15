@@ -9,12 +9,9 @@ import {
   Download,
   ShieldCheck,
 } from "lucide-react";
-import {
-  approvalLabels,
-  categoryLabels,
-  safeExternalUrl,
-  type Work,
-} from "@/lib/works";
+import { approvalLabels, categoryLabels, type Work } from "@/lib/works";
+import type { CSSProperties } from "react";
+import { attachmentHref, presentation } from "@/lib/presentation";
 
 export function WorkView({
   work,
@@ -24,12 +21,26 @@ export function WorkView({
   preview?: boolean;
 }) {
   const c = work.content;
+  const style = presentation(c.themeCode, c.colorCode);
   return (
-    <article className="work-document">
+    <article
+      className={`work-document theme-${style.theme.code}`}
+      style={
+        {
+          "--work-accent": style.color.color,
+          "--work-tint": style.color.tint,
+        } as CSSProperties
+      }
+    >
       <header className="work-cover">
         <div className="work-cover-top">
           <span className="work-eyebrow">DETWIL / ผลงานการจัดการเรียนรู้</span>
-          <BookOpen size={32} strokeWidth={1.5} />
+          <img
+            src="/images/agency-logos.png"
+            alt="ตราหน่วยงาน สพม.หนองคาย"
+            width={128}
+            height={72}
+          />
         </div>
         <h1>{c.title}</h1>
         <div className="work-byline">
@@ -81,9 +92,7 @@ export function WorkView({
                 </div>
                 <ul className="evidence-list">
                   {items.map((a) => {
-                    const href = a.fileId
-                      ? `/api/works/file?work=${encodeURIComponent(work.id)}&file=${encodeURIComponent(a.fileId)}${preview ? "&preview=1" : ""}`
-                      : safeExternalUrl(a.url);
+                    const href = attachmentHref(work.id, a, preview);
                     return (
                       <li key={a.id}>
                         {key === "MEDIA" ? (
@@ -105,7 +114,7 @@ export function WorkView({
                             href={href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="icon-button"
+                            className="resource-open"
                             title={a.fileId ? "ดาวน์โหลดไฟล์" : "เปิดหลักฐาน"}
                             aria-label={`${a.fileId ? "ดาวน์โหลด" : "เปิด"} ${a.title}`}
                           >
@@ -114,6 +123,7 @@ export function WorkView({
                             ) : (
                               <ExternalLink size={19} />
                             )}
+                            <span>{a.fileId ? "เปิดไฟล์" : "เปิดเนื้อหา"}</span>
                           </a>
                         )}
                       </li>

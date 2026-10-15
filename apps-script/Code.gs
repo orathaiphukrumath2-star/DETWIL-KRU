@@ -1,4 +1,6 @@
 function doGet(e) {
+  if (typeof DETWIL_beginRequest_ === 'function') DETWIL_beginRequest_();
+  try {
   var params = e && e.parameter ? e.parameter : {};
   if (params.health === '1') {
     return ContentService
@@ -12,9 +14,11 @@ function doGet(e) {
       message: 'DETWIL Apps Script API is running.'
     })))
     .setMimeType(ContentService.MimeType.JSON);
+  } finally { if (typeof DETWIL_endRequest_ === 'function') DETWIL_endRequest_(); }
 }
 
 function doPost(e) {
+  if (typeof DETWIL_beginRequest_ === 'function') DETWIL_beginRequest_();
   try {
     var body = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {};
     var action = body.action || '';
@@ -44,7 +48,7 @@ function doPost(e) {
     return ContentService
       .createTextOutput(JSON.stringify(DETWIL_handleError(err, { entityType: 'API' })))
       .setMimeType(ContentService.MimeType.JSON);
-  }
+  } finally { if (typeof DETWIL_endRequest_ === 'function') DETWIL_endRequest_(); }
 }
 
 function DETWIL_healthCheck() {

@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
+import { fileResponseHeaders } from "@/lib/fileResponse";
 import {
   callWorkApi,
   errorResponse,
@@ -27,12 +28,11 @@ export async function GET(request: NextRequest) {
     if (result.base64.length > 2800000)
       throw new WorkApiError("VALIDATION", "ไฟล์มีขนาดใหญ่เกินกำหนด");
     return new Response(Buffer.from(result.base64, "base64"), {
-      headers: {
-        "Content-Type": "application/octet-stream",
-        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(result.name.replace(/[\r\n]/g, ""))}`,
-        "Cache-Control": "private, no-store",
-        "X-Content-Type-Options": "nosniff",
-      },
+      headers: fileResponseHeaders(
+        result.name,
+        result.mime,
+        query.get("inline") === "1",
+      ),
     });
   } catch (error) {
     return errorResponse(error);

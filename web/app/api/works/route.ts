@@ -6,7 +6,7 @@ import {
   sessionCookie,
   WorkApiError,
 } from "@/lib/workServer";
-import type { Identity, PublicList } from "@/lib/works";
+import type { Identity, PublicList, Workspace } from "@/lib/works";
 import { isSameOrigin } from "@/lib/requestSecurity";
 import { allowAuthAttempt, preparePasswordPayload } from "@/lib/passwordServer";
 export const dynamic = "force-dynamic";
@@ -15,6 +15,7 @@ const actions = [
   "activateOwner",
   "passwordLogin",
   "session",
+  "workspace",
   "logout",
   "changePassword",
   "myWorks",
@@ -22,6 +23,7 @@ const actions = [
   "saveWork",
   "workflow",
   "uploadFile",
+  "attachFile",
   "adminData",
   "saveSchool",
   "createUser",
@@ -135,8 +137,12 @@ export async function POST(request: NextRequest) {
         token: string;
         user: Identity;
         maxAge?: number;
+        workspace?: Workspace;
       }>(body.action, body.payload);
-      const response = NextResponse.json({ ok: true, data: result.user });
+      const response = NextResponse.json({
+        ok: true,
+        data: { ...result.user, workspace: result.workspace },
+      });
       response.cookies.set(sessionCookie, result.token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",

@@ -52,6 +52,18 @@ test('draft is durable but not publicly readable; publication excludes private e
   assert.equal(result.approvalStatus, 'DISTRICT_APPROVED');
 });
 
+test('theme and color belong to the reviewed version; edits cannot change the published theme without review', () => {
+  const f = fixture(); const draft = f.save({ themeCode: 'bright', colorCode: 'rose', gradeLevel: 'ม.6' });
+  f.flow(f.approve(draft), 'PUBLISH');
+  const published = f.context.DETWIL_publicProjection_(f.tables.WORKS[0]);
+  assert.equal(published.content.themeCode, 'bright'); assert.equal(published.content.colorCode, 'rose');
+  assert.equal(published.content.gradeLevel, 'มัธยมศึกษาปีที่ 6');
+  const changed = f.save({ themeCode: 'editorial', colorCode: 'blue' }, draft);
+  assert.equal(changed.approvalStatus, 'DRAFT');
+  assert.equal(f.context.DETWIL_publicProjection_(f.tables.WORKS[0]).content.themeCode, 'bright');
+  assert.throws(() => f.flow(changed, 'PUBLISH'), /โรงเรียนและเขต/);
+});
+
 test('school then district approval is enforced, cannot self-review or cross schools', () => {
   const f = fixture(); let w = f.save();
   assert.throws(() => f.flow(w, 'SUBMIT_DISTRICT'), /ไม่สามารถเปลี่ยน/);

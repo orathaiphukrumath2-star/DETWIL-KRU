@@ -41,6 +41,8 @@ export type WorkContent = {
   schoolId: string;
   schoolName: string;
   attachments: Attachment[];
+  themeCode?: string;
+  colorCode?: string;
 };
 export type Work = {
   id: string;
@@ -98,6 +100,13 @@ export const roleStatusLabels: Record<string, string> = {
 };
 export type RoleRequest = { role: string; schoolId: string };
 export type School = { id: string; name: string; code?: string };
+export type WorkList = { items: Work[]; total: number; schools: School[] };
+export type Workspace = {
+  user: Identity;
+  works?: WorkList;
+  work?: Work;
+  workError?: string;
+};
 export type PublicSummary = {
   id: string;
   title: string;

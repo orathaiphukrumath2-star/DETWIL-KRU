@@ -1,6 +1,6 @@
 var DETWIL = DETWIL || {};
 
-DETWIL.VERSION = '0.5.0-password-recovery';
+DETWIL.VERSION = '0.6.0-faster-workspace-and-themes';
 
 DETWIL.PROJECT = Object.freeze({
   systemName: 'DETWIL',
