@@ -42,11 +42,13 @@ function RolePicker({
   schools,
   onChange,
   loading = false,
+  loadFailed = false,
   defaultTeacher = false,
 }: {
   schools: School[];
   onChange: (requests: RoleRequest[]) => void;
   loading?: boolean;
+  loadFailed?: boolean;
   defaultTeacher?: boolean;
 }) {
   const [chosen, setChosen] = useState<string[]>(
@@ -99,7 +101,7 @@ function RolePicker({
           </select>
         </label>
       )}
-      {!schools.length && (
+      {!schools.length && !loadFailed && (
         <p className="muted">
           {loading
             ? "กำลังโหลดรายชื่อสถานศึกษา"
@@ -126,7 +128,9 @@ export function Registration() {
     const controller = new AbortController();
     setLoading(true);
     setOptionsError("");
-    fetch(membershipOptionsUrl, { signal: controller.signal })
+    fetch(membershipOptionsUrl, {
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25000)]),
+    })
       .then(async (r) => {
         const body = await r.json();
         if (!r.ok || !body.ok)
@@ -138,7 +142,11 @@ export function Registration() {
       .catch((e) => {
         if (!controller.signal.aborted)
           setOptionsError(
-            e instanceof Error ? e.message : "โหลดข้อมูลไม่สำเร็จ",
+            e instanceof Error && e.name === "TimeoutError"
+              ? "โหลดรายชื่อโรงเรียนใช้เวลานาน กรุณาลองใหม่"
+              : e instanceof Error
+                ? e.message
+                : "โหลดข้อมูลไม่สำเร็จ",
           );
       })
       .finally(() => {
@@ -310,6 +318,7 @@ export function Registration() {
                 schools={options.schools}
                 onChange={setRequests}
                 loading={loading}
+                loadFailed={Boolean(optionsError)}
                 defaultTeacher
               />
               <div className="registration-footer">
@@ -346,24 +355,40 @@ export function MemberProfile({
   onError: (message: string) => void;
 }) {
   const [schools, setSchools] = useState<School[]>([]);
+  const [schoolsLoading, setSchoolsLoading] = useState(true);
+  const [schoolsError, setSchoolsError] = useState("");
+  const [schoolsAttempt, setSchoolsAttempt] = useState(0);
   const [requests, setRequests] = useState<RoleRequest[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   useEffect(() => {
     const controller = new AbortController();
-    fetch(membershipOptionsUrl, { signal: controller.signal })
+    setSchoolsLoading(true);
+    setSchoolsError("");
+    fetch(membershipOptionsUrl, {
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25000)]),
+    })
       .then(async (r) => {
         const body = await r.json();
-        if (!body.ok)
+        if (!r.ok || !body.ok)
           throw new Error(body?.error?.message || "โหลดสถานศึกษาไม่สำเร็จ");
         setSchools(body.data.schools);
       })
       .catch((e) => {
         if (!controller.signal.aborted)
-          onError(e instanceof Error ? e.message : "โหลดข้อมูลไม่สำเร็จ");
+          setSchoolsError(
+            e instanceof Error && e.name === "TimeoutError"
+              ? "โหลดรายชื่อโรงเรียนใช้เวลานาน กรุณาลองใหม่"
+              : e instanceof Error
+                ? e.message
+                : "โหลดข้อมูลไม่สำเร็จ",
+          );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSchoolsLoading(false);
       });
     return () => controller.abort();
-  }, []);
+  }, [schoolsAttempt]);
   async function perform(action: () => Promise<void>) {
     setBusy(true);
     setNotice("");
@@ -435,10 +460,32 @@ export function MemberProfile({
             });
           }}
         >
-          <RolePicker schools={schools} onChange={setRequests} />
+          {schoolsError && (
+            <div className="studio-alert" role="alert">
+              {schoolsError}
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setSchoolsAttempt((value) => value + 1)}
+              >
+                <RotateCcw size={17} /> โหลดสถานศึกษาใหม่
+              </button>
+            </div>
+          )}
+          <RolePicker
+            schools={schools}
+            onChange={setRequests}
+            loading={schoolsLoading}
+            loadFailed={Boolean(schoolsError)}
+          />
           <button
             className="primary-button"
-            disabled={busy || !requests.length}
+            disabled={
+              busy ||
+              schoolsLoading ||
+              Boolean(schoolsError) ||
+              !requests.length
+            }
           >
             <Send size={17} />
             ส่งคำขอ

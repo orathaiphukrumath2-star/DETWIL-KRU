@@ -64,3 +64,12 @@ test('session outages are not silently interpreted as a signed-out user; recover
   assert.match(recovery, /identityVerified: true/);
   assert.doesNotMatch(recovery, /localStorage|sessionStorage|setInterval/);
 });
+
+test('member school options distinguish loading from empty data and allow explicit retry after failure', () => {
+  const source = readFileSync(new URL('../components/Membership.tsx', import.meta.url), 'utf8');
+  const profile = source.slice(source.indexOf('export function MemberProfile('), source.indexOf('export function MemberAdmin('));
+  assert.match(profile, /loading=\{schoolsLoading\}/);
+  assert.match(profile, /setSchoolsAttempt/);
+  assert.match(profile, /AbortSignal.timeout\(25000\)/);
+  assert.match(profile, /Boolean\(schoolsError\)/);
+});
